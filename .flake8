@@ -1,0 +1,8 @@
+[flake8]
+exclude = 
+    .git,
+    __pycache__,
+    res/,
+    venv/,
+    data_adbench/
+max-line-length = 120

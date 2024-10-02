@@ -1,0 +1,15 @@
+numpy
+torch
+matplotlib
+pandas
+scikit-learn
+scipy
+shap
+pyod
+hydra-core
+omegaconf
+black
+flake8
+adbench
+tqdm
+isort
