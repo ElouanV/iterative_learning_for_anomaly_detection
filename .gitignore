@@ -5,3 +5,7 @@ res/
 *.csv
 __pycache__/
 *.png
+.vscode/
+outputs/
+results/
+multirun/

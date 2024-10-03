@@ -1,9 +1,8 @@
 # This code is from https://github.com/vicliv/DTE by (V. Livernoche, V. Jain, Y. Hezaveh, S. Ravanbakhsh)
-import logging
+
 
 import numpy as np
 import torch
-from sklearn.metrics import roc_auc_score
 from torch import nn
 from torch.optim import Adam
 from torch.utils.data import DataLoader
@@ -146,7 +145,6 @@ class DTE:
         verbose=True,
         give_train_losses=False,
     ):
-        logger = logging.getLogger("DTE.fit()")
         if self.model is None:  # allows retraining
             self.model = MLP(
                 [X_train.shape[-1]] + self.hidden_size, num_bins=self.num_bins
@@ -163,38 +161,28 @@ class DTE:
         )
 
         train_losses = []
-        for epoch in tqdm(range(self.epochs)):
-            self.model.train()
-            loss_ = []
+        with tqdm(total=self.epochs, desc="Epochs") as pbar:
+            for _ in range(self.epochs):
+                self.model.train()
+                loss_ = []
+                for x in train_loader:
+                    x = x.to(self.device)
+                    optimizer.zero_grad()
 
-            for x in train_loader:
-                x = x.to(self.device)
-                optimizer.zero_grad()
+                    # sample t uniformly
+                    t = torch.randint(
+                        0, self.T, (x.shape[0],), device=self.device
+                    ).long()
 
-                # sample t uniformly
-                t = torch.randint(
-                    0, self.T, (x.shape[0],), device=self.device
-                ).long()
+                    # compute the loss
+                    loss = self.compute_loss(x, t)
 
-                # compute the loss
-                loss = self.compute_loss(x, t)
-
-                loss.backward()
-                optimizer.step()
-                loss_.append(loss.item())
-
-            train_losses.append(np.mean(np.array(loss_)))
-
-            if epoch % 100 == 0 and verbose:
-                if X_test is not None and y_test is not None:
-                    logger.info(
-                        roc_auc_score(
-                            y_true=y_test, y_score=self.predict_score(X_test)
-                        )
-                    )
-                logger.info(
-                    f"Epoch {epoch} Train Loss: {train_losses[len(train_losses)-1]}"
-                )
+                    loss.backward()
+                    optimizer.step()
+                    loss_.append(loss.item())
+                pbar.update(1)
+                train_losses.append(np.mean(np.array(loss_)))
+                pbar.set_postfix({"Loss: ": "{:.4f}".format(train_losses[-1])})
         if give_train_losses:
             return self, train_losses
         return self

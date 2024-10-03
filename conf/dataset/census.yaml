@@ -1,0 +1,3 @@
+dataset_name: 'census'
+dataset_path: 'data_adbench/9_census.npz'
+test_ratio: 0.2

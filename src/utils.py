@@ -1,17 +1,16 @@
 import logging
+import os
 
 import matplotlib.pyplot as plt
 import numpy as np
-from pyod.models.copod import COPOD
-from pyod.models.deep_svdd import DeepSVDD
-from pyod.models.knn import KNN
-from pyod.models.ocsvm import OCSVM
-from pyod.models.pca import PCA
+import pandas as pd
+from matplotlib.path import Path
 
 from models.dte import DTECategorical, DTEInverseGamma
+from src.models.ddpm import DDPM
 
 
-def configure_logger():
+def configure_logger(saving_path: Path):
     """
     Configures the logger for the application with file and console handlers
     """
@@ -28,7 +27,7 @@ def configure_logger():
     logger.addHandler(console_handler)
 
     # Create file handler and set level to debug
-    file_handler = logging.FileHandler("dte_itered.log")
+    file_handler = logging.FileHandler(os.path.join(saving_path, "run.log"))
     file_handler.setLevel(logging.DEBUG)
     file_formatter = logging.Formatter(
         "[%(asctime)s] - [%(levelname)s] - %(message)s"
@@ -95,23 +94,36 @@ def plot_f1_and_loss(
     plt.close()
 
 
-def select_model(model_name):
-    if model_name == "DTECategorical":
-        return DTECategorical()
-    elif model_name == "DTEInverseGamma":
-        return DTEInverseGamma()
-    elif model_name == "PCA":
-        return PCA(n_components=2)
-    elif model_name == "OCSVM":
-        return OCSVM()
-    elif model_name == "DeepSVDD":
-        return DeepSVDD()
-    elif model_name == "DAGMM":
-        return
-    elif model_name == "COPOD":
-        return COPOD()
-    elif model_name == "KNN":
-        return KNN()
+def select_model(model_config: dict):
+    if model_config.model_name == "DTECategorical":
+        return DTECategorical(
+            hidden_size=model_config.model_parameters.hidden_size,
+            epochs=model_config.training.epochs,
+            batch_size=model_config.training.batch_size,
+            lr=model_config.training.learning_rate,
+            num_bins=model_config.model_parameters.num_bins,
+        )
+    elif model_config.model_name == "DTEInverseGamma":
+        return DTEInverseGamma(
+            hidden_size=model_config.model_parameters.hidden_size,
+            epochs=model_config.training.epochs,
+            batch_size=model_config.training.batch_size,
+            lr=model_config.training.learning_rate,
+        )
+    elif model_config.model_name == "DDPM":
+        resnet_params = {
+            "d_main": model_config.model_parameters.d_main,
+            "n_blocks": model_config.model_parameters.n_blocks,
+            "d_hidden": model_config.model_parameters.d_hidden,
+            "dropout_first": model_config.model_parameters.dropout_first,
+            "dropout_second": model_config.model_parameters.dropout_second,
+        }
+        return DDPM(
+            epochs=model_config.training.epochs,
+            batch_size=model_config.training.batch_size,
+            lr=model_config.training.learning_rate,
+            resnet_parameters=resnet_params,
+        )
 
 
 def count_ano(indices, y):
@@ -131,10 +143,9 @@ def pred_from_scores(scores, num_anomalies):
     indices_sorted = sorted(
         range(len(scores)), key=lambda i: scores[i], reverse=True
     )
-    result = [0] * len(scores)
-    # Mettre des 1 aux p premiers indices triés
-    for i in indices_sorted[:num_anomalies]:
-        result[i] = 1
+    indices_sorted = np.argsort(scores)[::-1]
+    result = np.zeros(len(scores))
+    result[indices_sorted[:num_anomalies]] = 1
     return result
 
 
@@ -161,3 +172,16 @@ def get_normal_indices(
     n = scores.shape[0]
     indices_sorted = sorted(range(len(scores)), key=lambda i: scores[i])
     return indices_sorted[: int(n * p)]
+
+
+def get_dataset(data_path: Path):
+    extension = data_path.suffix
+    X, y = None, None
+    if extension == ".csv":
+        df = pd.read_csv(data_path, header=None)
+        X = df.iloc[:, :-1].to_numpy()
+        y = df.iloc[:, -1].to_numpy()
+    elif extension == ".npz":
+        data = np.load(data_path, allow_pickle=True)
+        X, y = data["X"], data["y"]
+    return X, y

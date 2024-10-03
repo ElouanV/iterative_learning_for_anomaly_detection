@@ -1,0 +1,15 @@
+random_seed: 42
+save_fig: True
+output_path: 'results'
+
+defaults:
+  - _self_
+  - dataset: 'annthyroid'
+  - model: 'DDPM'
+  - training_method: 'iterative_dataset_sampling'
+
+hydra:
+  sweeper: 
+    params:
+      model: DTECategorical, DTEInverseGamma, DDPM
+      dataset: annthyroid, census

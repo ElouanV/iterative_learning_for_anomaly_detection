@@ -1,0 +1,3 @@
+dataset_name: 'annthyroid'
+dataset_path: 'data_adbench/2_annthyroid.npz'
+test_ratio: 0.2
