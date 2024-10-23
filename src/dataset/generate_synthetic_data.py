@@ -1,4 +1,5 @@
 import argparse
+import pickle
 
 import numpy as np
 import pandas as pd
@@ -11,6 +12,7 @@ import pandas as pd
 
 
 def generate_synthetic_data(num_samples, add_correlation=False):
+    print(add_correlation)
     # Générer les features
     features = {
         "feature1": np.random.normal(loc=0, scale=1, size=num_samples),
@@ -46,16 +48,17 @@ def add_anomalies(
     num_anomalies1 = int(prop_anomalies1 * num_samples)
     num_anomalies2 = int(prop_anomalies2 * num_samples)
     num_anomalies3 = int(prop_anomalies3 * num_samples)
+    print(num_anomalies1, num_anomalies2, num_anomalies3)
 
     # 1 outliers : altération des hyperparamètres
-    for _ in range(num_anomalies1):
-        idx = np.random.randint(0, num_samples)
+    indices = np.random.choice(num_samples, num_anomalies1, replace=False)
+    for idx in indices:
         df.at[idx, "feature1"] = np.random.choice([-4, 4])
         df.at[idx, "anomaly"] = 1
 
     # 2. Altération des directions de causalité (ajout/suppression de corrélation)
-    for _ in range(num_anomalies2):
-        idx = np.random.randint(0, num_samples)
+    indices = np.random.choice(num_samples, num_anomalies2, replace=False)
+    for idx in indices:
         if add_correlation:
             if np.random.rand() > 0.5:
                 # Ajouter une corrélation entre feature2 et feature3
@@ -74,6 +77,7 @@ def add_anomalies(
             df.at[idx, "anomaly"] = 2
 
     # 3. Ajouter des variables latentes (ajouter des anomalies dans des variables connectées)
+    indices = np.random.choice(num_samples, num_anomalies3, replace=False)
     for _ in range(num_anomalies3):
         idx = np.random.randint(0, num_sample)
         latent_effect = np.random.normal(
@@ -102,21 +106,21 @@ if __name__ == "__main__":
         "-a1",
         "--prop_anomalies1",
         type=float,
-        default=0.033,
+        default=0.0,
         help="Proportion of anomaly of type 1",
     )
     parser.add_argument(
         "-a2",
         "--prop_anomalies2",
         type=float,
-        default=0.033,
+        default=0.0,
         help="Proportion of anomaly of type 2",
     )
     parser.add_argument(
         "-a3",
         "--prop_anomalies3",
         type=float,
-        default=0.033,
+        default=0.0,
         help="Proportion of anomaly of type 3",
     )
     parser.add_argument(
@@ -137,4 +141,11 @@ if __name__ == "__main__":
     df_with_anomalies = add_anomalies(
         df, prop_anomalies1, prop_anomalies2, prop_anomalies3, add_correlation
     )
-    df_with_anomalies.to_csv(dataSetPath, index=False, header=None)
+    data = {}
+    X = df_with_anomalies.drop(columns=["anomaly"]).to_numpy()
+
+    y = df_with_anomalies["anomaly"].to_numpy()
+    data["X"] = X
+    data["y"] = y
+
+    pickle.dump(data, open(dataSetPath, "wb"))

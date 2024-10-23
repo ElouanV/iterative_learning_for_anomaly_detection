@@ -5,7 +5,6 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
-import scipy as sp
 from sklearn.metrics import f1_score, roc_auc_score
 
 from utils import pred_from_scores, select_model
@@ -14,6 +13,7 @@ from utils import pred_from_scores, select_model
 class SamplingIterativeLearning:
     def __init__(self, conf: dict, saving_path: Path = None):
         self.model_config = conf.model
+        self.conf = conf
         self.update_trainset = self.get_sampling_method(conf)
         self.logger = logging.getLogger(__name__)
         self.saving_path = saving_path
@@ -22,9 +22,9 @@ class SamplingIterativeLearning:
     def get_sampling_method(conf: dict):
         conf = conf.training_method
         if conf.ratio == "cosine":
-            return CosineSampling(conf.snu_min, conf.nu_max, conf.max_iter)
+            return CosineSampling(conf.nu_min, conf.nu_max, conf.max_iter)
         elif conf.ratio == "exponential":
-            return ExponentialSampling(conf.snu_min, conf.nu_max, conf.max_iter)
+            return ExponentialSampling(conf.nu_min, conf.nu_max, conf.max_iter)
         elif type(conf.ratio) is float:
             return ConstantSampling(conf.ratio)
         else:
@@ -40,6 +40,7 @@ class SamplingIterativeLearning:
         y_eval=None,
         model=None,
         max_iter=10,
+        device="cuda",
     ):
 
         if model is None:
@@ -59,15 +60,17 @@ class SamplingIterativeLearning:
             )
             current_model = deepcopy(model)
 
-            model, train_loss = current_model.fit(
-                current_X, give_train_losses=True
-            )
+            model, train_loss = current_model.fit(current_X)
             scores = current_model.predict_score(X_train)
             current_X, current_y = self.update_trainset(
                 scores, X_train, y_train, iteration
             )
             train_log["train_losses"].append(train_loss[-1])
-
+            # Save scores
+            np.save(
+                os.path.join(self.saving_path, f"scores_{iteration}.npy"),
+                scores,
+            )
             # Evaluation
             if X_eval is not None and y_eval is not None:
                 scores = current_model.predict_score(X_eval)
@@ -95,6 +98,7 @@ class SamplingIterativeLearning:
 
         plt.legend()
         plt.xlabel("iteration")
+        plt.grid()
 
         plt.title("Training log")
 
@@ -107,12 +111,15 @@ class SamplingMethod:
         self.method = method
         pass
 
-    def __call__(self, scores, X, y, iteration_number):
+    def __call__(self, scores, X, y, iteration_number) -> tuple:
+        pass
+
+    def get_current_ratio(self, iteration_number):
         pass
 
 
 class ConstantSampling(SamplingMethod):
-    def __init__(self, ratio: float, method="constant"):
+    def __init__(self, ratio: float, method="deterministic"):
         super().__init__(method)
         self.ratio = ratio
 
@@ -120,7 +127,7 @@ class ConstantSampling(SamplingMethod):
         """
         Select the ratio% lowest scores
         """
-        if self.method == "constant":
+        if self.method == "deterministic":
             indices_sorted = sorted(
                 range(len(scores)), key=lambda i: scores[i], reverse=False
             )
@@ -128,15 +135,21 @@ class ConstantSampling(SamplingMethod):
             return X[indices_to_keep], y[indices_to_keep]
         elif self.method == "probabilistic":
             # Sampling with probability proportional to the score
-            proba = sp.softmax(scores)
+            proba = scores / np.sum(scores)
             indices = np.random.choice(
                 range(len(scores)), size=int(len(scores) * self.ratio), p=proba
             )
             return X[indices], y[indices]
 
+    def get_current_ratio(self, iteration_number):
+        return self.ratio
+
 
 class CosineSampling(SamplingMethod):
-    def __init__(self, nu_min: float, nu_max: float, max_iter=10):
+    def __init__(
+        self, nu_min: float, nu_max: float, max_iter=10, method="deterministic"
+    ):
+        super().__init__(method)
         self.nu_min = nu_min
         self.nu_max = nu_max
         self.max_iter = max_iter
@@ -148,7 +161,7 @@ class CosineSampling(SamplingMethod):
         ratio = self.nu_min + 1 / 2 * (self.nu_max - self.nu_min) * (
             1 + np.cos(np.pi * iteration_number / self.max_iter)
         )
-        if self.method == "constant":
+        if self.method == "deterministic":
             indices_sorted = sorted(
                 range(len(scores)), key=lambda i: scores[i], reverse=False
             )
@@ -156,27 +169,35 @@ class CosineSampling(SamplingMethod):
             return X[indices], y[indices]
         elif self.method == "probabilistic":
             # Sampling with probability proportional to the score
-            proba = sp.softmax(scores)
+            proba = scores / np.sum(scores)
             indices = np.random.choice(
                 range(len(scores)), size=int(len(scores) * ratio), p=proba
             )
             return X[indices], y[indices]
 
+    def get_current_ratio(self, iteration_number):
+        return self.nu_min + 1 / 2 * (self.nu_max - self.nu_min) * (
+            1 + np.cos(np.pi * iteration_number / self.max_iter)
+        )
+
 
 class ExponentialSampling(SamplingMethod):
-    def __init__(self, nu_min: float, nu_max: float, max_iter=10):
+    def __init__(
+        self, nu_min: float, nu_max: float, max_iter=10, method="deterministic"
+    ):
+        super().__init__(method)
         self.nu_min = nu_min
         self.nu_max = nu_max
         self.max_iter = max_iter
 
-    def __call__(self, scores, X, y, iteration_number):
+    def __call__(self, scores, X, y, iteration_number) -> tuple:
         """
         Select the ratio% lowest scores
         """
         ratio = self.nu_min + 1 / 2 * (self.nu_max - self.nu_min) * (
             1 + np.exp(-iteration_number / self.max_iter)
         )
-        if self.method == "constant":
+        if self.method == "deterministic":
             indices_sorted = sorted(
                 range(len(scores)), key=lambda i: scores[i], reverse=False
             )
@@ -184,8 +205,13 @@ class ExponentialSampling(SamplingMethod):
             return X[indices], y[indices]
         elif self.method == "probabilistic":
             # Sampling with probability proportional to the score
-            proba = sp.softmax(scores)
+            proba = scores / np.sum(scores)
             indices = np.random.choice(
                 range(len(scores)), size=int(len(scores) * ratio), p=proba
             )
             return X[indices], y[indices]
+
+    def get_current_ratio(self, iteration_number):
+        return self.nu_min + 1 / 2 * (self.nu_max - self.nu_min) * (
+            1 + np.exp(-iteration_number / self.max_iter)
+        )

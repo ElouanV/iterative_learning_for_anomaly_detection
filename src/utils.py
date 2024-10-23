@@ -1,100 +1,15 @@
-import logging
 import os
+from pathlib import Path
 
-import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
-from matplotlib.path import Path
 
+from dataset.data_generator import DataGenerator
+from models.ddpm.ddpm import DDPM
+from models.deepsvdd.deepSVDD import DeepSVDD
 from models.dte import DTECategorical, DTEInverseGamma
-from src.models.ddpm import DDPM
 
 
-def configure_logger(saving_path: Path):
-    """
-    Configures the logger for the application with file and console handlers
-    """
-    logger = logging.getLogger()
-    logger.setLevel(logging.DEBUG)
-
-    # Create console handler and set level to info
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO)
-    console_formatter = logging.Formatter(
-        "[%(asctime)s] - [%(levelname)s] - %(message)s"
-    )
-    console_handler.setFormatter(console_formatter)
-    logger.addHandler(console_handler)
-
-    # Create file handler and set level to debug
-    file_handler = logging.FileHandler(os.path.join(saving_path, "run.log"))
-    file_handler.setLevel(logging.DEBUG)
-    file_formatter = logging.Formatter(
-        "[%(asctime)s] - [%(levelname)s] - %(message)s"
-    )
-    file_handler.setFormatter(file_formatter)
-    logger.addHandler(file_handler)
-
-    return logger
-
-
-def plot_f1_and_loss(
-    data, dataset_name, X, num_anomalies, percentage_keep, num_iteration
-):
-
-    # Create a figure with 2 subplots side by side
-    fig, axs = plt.subplots(1, 2, figsize=(15, 8))
-
-    # First subplot: F1 scores
-    axs[0].plot(data["F1_scores"], label="F1_scores")
-    axs[0].plot(
-        data["nb_anos_in_training"], label="nb_anos_in_training", color="green"
-    )
-    axs[0].set_xlabel("itération")
-    axs[0].set_ylabel("score")
-    axs[0].set_title("Evolution scores")
-    axs[0].grid()
-    axs[0].legend()
-
-    # Second subplot: Training Loss
-    n_point_loss = num_iteration + 1
-    indices_plot = np.linspace(
-        0, len(data["train_losses"]) - 1, n_point_loss
-    ).astype(int)
-    train_losses_sampled = [data["train_losses"][i] for i in indices_plot]
-    axs[1].plot(
-        np.linspace(0, len(data["F1_scores"]) - 1, n_point_loss),
-        train_losses_sampled,
-        label="Train Loss",
-    )
-    axs[1].set_xlabel("itération")
-    axs[1].set_title("Evolution Loss")
-    axs[1].grid()
-    axs[1].legend()
-
-    fig.suptitle(
-        f"{dataset_name}\nNombre d'observations: {X.shape[0]}\n Nombre de features: {X.shape[1]}\n \
-            proportion d'anomalies: {(num_anomalies*100/X.shape[0]):.2f}%",
-        fontsize=14,
-    )
-
-    plt.tight_layout(rect=[0, 0.05, 1, 0.95])
-    plt.subplots_adjust(hspace=0.4, bottom=0.2)
-    plt.text(
-        0.5,
-        0.01,
-        f"Métriques additionnelles:\n E(F1) =  {np.mean(data['F1_scores']):.2f}\n",
-        ha="center",
-        va="bottom",
-        transform=fig.transFigure,
-        fontsize=12,
-    )
-
-    plt.savefig(f"./res/{dataset_name}/summary_p_{str(percentage_keep)}.png")
-    plt.close()
-
-
-def select_model(model_config: dict):
+def select_model(model_config: dict, device):
     if model_config.model_name == "DTECategorical":
         return DTECategorical(
             hidden_size=model_config.model_parameters.hidden_size,
@@ -102,6 +17,7 @@ def select_model(model_config: dict):
             batch_size=model_config.training.batch_size,
             lr=model_config.training.learning_rate,
             num_bins=model_config.model_parameters.num_bins,
+            device=device,
         )
     elif model_config.model_name == "DTEInverseGamma":
         return DTEInverseGamma(
@@ -109,6 +25,7 @@ def select_model(model_config: dict):
             epochs=model_config.training.epochs,
             batch_size=model_config.training.batch_size,
             lr=model_config.training.learning_rate,
+            device=device,
         )
     elif model_config.model_name == "DDPM":
         resnet_params = {
@@ -123,7 +40,19 @@ def select_model(model_config: dict):
             batch_size=model_config.training.batch_size,
             lr=model_config.training.learning_rate,
             resnet_parameters=resnet_params,
+            device=device,
+            T=model_config.model_parameters.T,
         )
+    elif model_config.model_name == "DeepSVDD":
+        model = DeepSVDD(
+            nu=model_config.model_parameters.nu,
+        )
+        model.set_network(
+            model_config.model_parameters.net_name,
+            input_dim=model_config.model_parameters.input_dim,
+            model_config=model_config,
+        )
+        return model
 
 
 def count_ano(indices, y):
@@ -174,14 +103,76 @@ def get_normal_indices(
     return indices_sorted[: int(n * p)]
 
 
-def get_dataset(data_path: Path):
-    extension = data_path.suffix
-    X, y = None, None
-    if extension == ".csv":
-        df = pd.read_csv(data_path, header=None)
-        X = df.iloc[:, :-1].to_numpy()
-        y = df.iloc[:, -1].to_numpy()
-    elif extension == ".npz":
-        data = np.load(data_path, allow_pickle=True)
-        X, y = data["X"], data["y"]
-    return X, y
+def get_dataset(cfg: Path):
+    if cfg.training_method.name == "semi-supervised":
+        datagenerator = DataGenerator(
+            seed=cfg.random_seed, test_size=0.5, normal=True, config=cfg
+        )  # data generator
+    else:
+        datagenerator = DataGenerator(
+            seed=cfg.random_seed, test_size=0, normal=False, config=cfg
+        )  # data generator
+
+    datagenerator.dataset = cfg.dataset.dataset_name  # specify the dataset name
+    data = datagenerator.generator(
+        la=0, max_size=50000
+    )  # maximum of 50,000 data points are available
+    if cfg.training_method.name != "semi-supervised":
+        X = data["X_test"]
+        y = data["y_test"]
+
+        indices = np.arange(len(X))
+        subset = np.random.choice(indices, size=len(indices), replace=True)
+
+        data = {}
+        data["X_train"] = X[subset]
+        data["y_train"] = y[subset]
+
+        data["X_test"] = X
+        data["y_test"] = y
+    return data
+
+
+def setup_experiment(cfg: dict):
+    experiment_name = (
+        f"{cfg.model.model_name}_{cfg.training_method.name}_{cfg.training_method.sampling_method}"
+        + (
+            f"_{cfg.training_method.ratio}"
+            if cfg.training_method.name == "dataset_sampling"
+            else ""
+        )
+        + f"_s{cfg.random_seed}"
+    )
+    saving_path = Path(
+        cfg.output_path,
+        str(cfg.run_id),
+        experiment_name,
+        cfg.dataset.dataset_name,
+    )
+    os.makedirs(saving_path, exist_ok=True)
+    return saving_path
+
+
+def check_cuda(logger, device=None):
+    import torch
+
+    if torch.cuda.is_available():
+        print(f"Cuda version: {torch.version.cuda}")
+    else:
+        logger.warning("Cuda not available")
+    if device is None or device == "auto":
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    else:
+        device = torch.device(device)
+    logger.info(f"Device: {device}")
+    return device
+
+
+def low_density_anomalies(test_log_probs, num_anomalies):
+    """Helper function for the F1-score, selects the num_anomalies lowest values of test_log_prob"""
+    anomaly_indices = np.argpartition(test_log_probs, num_anomalies - 1)[
+        :num_anomalies
+    ]
+    preds = np.zeros(len(test_log_probs))
+    preds[anomaly_indices] = 1
+    return preds

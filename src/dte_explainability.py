@@ -1,0 +1,209 @@
+import logging
+import time
+from pathlib import Path
+
+import hydra
+import numpy as np
+import omegaconf
+import pandas as pd
+import sklearn.metrics as skm
+from adbench.myutils import Utils
+from matplotlib import pyplot as plt
+
+from training_method.iterative_learning import SamplingIterativeLearning
+from training_method.weighted_loss_iterative_learning import \
+    WeightedLossIterativeLearning
+from utils import (check_cuda, get_dataset, low_density_anomalies,
+                   select_model, setup_experiment)
+from viz.training_viz import (plot_anomaly_score_distribution,
+                              plot_anomaly_score_distribution_split,
+                              plot_couple_feature_importance_matrix,
+                              plot_feature_importance, plot_tsne)
+
+
+def train_model(
+    cfg,
+    model,
+    X_train,
+    y_train,
+    X_eval=None,
+    y_eval=None,
+    saving_path: Path = None,
+):
+    train_log = {}
+    if cfg.training_method.name == "unsupervised":
+        model, train_losses = model.fit(X_train, cfg.model)
+    elif cfg.training_method.name == "semi-supervised":
+        model, train_losses = model.fit(
+            X_train, y_train, model_config=cfg.model
+        )
+    elif cfg.training_method.name == "dataset_sampling":
+        iterative_learning = SamplingIterativeLearning(
+            cfg, saving_path=saving_path
+        )
+        model, train_log = iterative_learning.train(
+            X_train,
+            y_train,
+            X_eval,
+            y_eval,
+            model,
+            cfg.training_method.max_iter,
+        )
+    elif cfg.training_method.name == "weighted_loss":
+        iterative_learning = WeightedLossIterativeLearning(cfg)
+        model, train_log = iterative_learning.train(
+            X_train,
+            y_train,
+            X_eval,
+            y_eval,
+            model,
+            cfg.iterative_learning.max_iter,
+        )
+    else:
+        raise ValueError(f"Unknown training method: {cfg.training_method.name}")
+    return model, train_log
+
+
+def run_config(cfg, logger, device):
+    utils = Utils()  # utils function
+    cfg.run_id = "ddpm_explainability"
+    utils.set_seed(cfg.random_seed)
+    saving_path = setup_experiment(cfg)
+    data = get_dataset(cfg)
+    logger.info(
+        f"Model name: {cfg.model.model_name}, dataset name: {cfg.dataset.dataset_name}, training method:"
+        f" {cfg.training_method.name}, sampling name(if applicable):"
+        f" {cfg.training_method.sampling_method}, ratio(for iterative leaning"
+        f" sampling method only): "
+        f"{cfg.training_method.ratio if cfg.training_method =='iterative_dataset_sampling' else None}, random seed:   \
+            {cfg.random_seed}"
+    )
+    model = select_model(cfg.model, device=device)
+
+    # training, for unsupervised models the y label will be discarded
+    start_time = time.time()
+    data["y_train"][data["y_train"] > 0] = 1
+    if cfg.mode == 'debug':
+        data["X_train"] = data["X_train"][:100]
+        data["y_train"] = data["y_train"][:100]
+        data["X_test"] = data["X_test"][:100]
+        data["y_test"] = data["y_test"][:100]
+    model, train_log = train_model(
+        cfg,
+        model,
+        data["X_train"],
+        data["y_train"],
+        X_eval=data["X_test"],
+        y_eval=data["y_test"],
+        saving_path=saving_path,
+    )
+    end_time = time.time()
+    training_time = end_time - start_time
+
+    start_time = time.time()
+    score = model.predict_score(data["X_test"])
+    end_time = time.time()
+    inference_time = end_time - start_time
+
+    y_test_anomaly = data["y_test"].copy()
+    y_test_anomaly[y_test_anomaly > 0] = 1
+    indices = np.arange(len(data["y_test"]))
+    # Suppose we know how much anomaly are in the dataset
+    p = low_density_anomalies(-score, len(indices[y_test_anomaly == 1]))
+    f1_score = skm.f1_score(y_test_anomaly, p)
+    plot_tsne(data, y_test_anomaly, p, saving_path)
+    plot_anomaly_score_distribution(score, saving_path)
+    plot_anomaly_score_distribution_split(score, y_test_anomaly, p, saving_path)
+    if len(np.unique(data["y_test"])) > 2:
+        # TODO! refactor this code
+        detection_rate = []
+        for i in np.unique(data["y_test"])[1:]:
+            i_anomaly_indices = data["y_test"] == i
+            detection_rate.append(
+                np.sum(p[i_anomaly_indices]) / np.sum(i_anomaly_indices) * 100
+            )
+            logger.info(
+                f"Detection rate for class {i}: {detection_rate[-1]}, number of "
+                f"samples: {np.sum(i_anomaly_indices)}, detected samples: {np.sum(p[i_anomaly_indices])}"
+            )
+        plt.bar(np.unique(data["y_test"])[1:], detection_rate)
+        # Display count on top of the bar
+        plt.xticks(np.unique(data["y_test"]))
+        plt.ylabel("Detection rate")
+        plt.title("Detection rate per class")
+        plt.grid()
+        plt.savefig(Path(saving_path, "detection_rate_per_class.png"))
+
+    logger.info(f"F1 score: {f1_score}")
+
+    inds = np.where(np.isnan(score))
+    score[inds] = 0
+
+    result = utils.metric(y_true=y_test_anomaly, y_score=score)
+    logger.info(f'AUCROC: {result["aucroc"]}')
+
+    metric_df = {}
+    metric_df["training_time"] = training_time
+    metric_df["inference_time"] = inference_time
+    metric_df["f1_score"] = f1_score
+    metric_df["model_name"] = cfg.model.model_name
+    metric_df["dataset_name"] = cfg.dataset.dataset_name
+    metric_df["training_method"] = cfg.training_method.name
+    metric_df["sampling_method"] = cfg.training_method.sampling_method
+    metric_df["random_seed"] = cfg.random_seed
+    metric_df["aucroc"] = result["aucroc"]
+    metric_df = pd.DataFrame([metric_df])
+    X_anomaly = data['X_test'][y_test_anomaly == 1]
+
+    feature_score, couple_feature_score = model.explain(
+       X_anomaly, saving_path=saving_path, step=5
+    )
+    plot_feature_importance(feature_score, saving_path=saving_path)
+    plot_couple_feature_importance_matrix(couple_feature_score, saving_path=saving_path)
+    np.save(Path(saving_path, "feature_score.npy"), feature_score)
+    np.save(Path(saving_path, "couple_feature_score.npy"), couple_feature_score)
+    if cfg.mode != "debug":
+        metric_df.to_csv(
+            Path(
+                saving_path,
+                "model_metrics.csv",
+            )
+        )
+    train_log = pd.DataFrame(train_log)
+    if cfg.mode != "debug":
+        train_log.to_csv(
+            Path(
+                saving_path,
+                "train_log.csv",
+            )
+        )
+    # Dump used configuration
+    omegaconf.OmegaConf.save(cfg, Path(saving_path, "experiment_config.yaml"))
+
+
+@hydra.main(version_base=None, config_path="../conf", config_name="config")
+def main(cfg: omegaconf.DictConfig):
+    logger = logging.getLogger(__name__)
+    device = check_cuda(logger, cfg.device)
+    if cfg.dataset.data_type != "tabular":
+        raise NotImplementedError(
+            f"Data type {cfg.dataset.data_type} not implemented yet"
+        )
+    if cfg.mode == "benchmark":
+        if cfg.training_method.name == "dataset_sampling":
+            for ratio in [0.5, "cosine", "exponential"]:
+                cfg.training_method.ratio = ratio
+                for sampling_method in ["deterministic", "probabilistic"]:
+                    cfg.training_method.sampling_method = sampling_method
+                    run_config(cfg, logger, device)
+        else:
+            run_config(cfg, logger, device)
+    elif cfg.mode == "debug":
+        cfg.model.training.epochs = 3
+        if cfg.training_method.name == "dataset_sampling":
+            cfg.training_method.max_iter = 2
+        run_config(cfg, logger, device)
+
+
+if __name__ == "__main__":
+    main()

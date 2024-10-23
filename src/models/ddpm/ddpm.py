@@ -17,6 +17,9 @@ import torch.nn.functional as F
 from torch import Tensor, nn
 from torch.optim import Adam
 from torch.utils.data import DataLoader
+from tqdm import tqdm
+
+from models.losses import WMSELoss
 
 ModuleType = Union[str, Callable[..., nn.Module]]
 
@@ -342,7 +345,7 @@ class DDPM:
         seed=0,
         model_name="DDPM",
         epochs=400,
-        batch_size=64,
+        batch_size=32,
         lr=1e-4,
         weight_decay=5e-4,
         T=1000,
@@ -358,7 +361,7 @@ class DDPM:
         self.full_path = full_path
 
         self.T = T
-        self.rec_t = reconstruction_t
+        self.rec_t = reconstruction_t if reconstruction_t < T else int(T * 0.25)
 
         if device is None:
             self.device = torch.device(
@@ -369,7 +372,7 @@ class DDPM:
 
         self.seed = seed
         self.resnet_parameters = resnet_parameters
-        betas = torch.linspace(0.0001, 0.01, T)  # linear beta scheduling
+        betas = torch.linspace(0.0001, 0.01, T + 1)  # linear beta scheduling
 
         # Pre-calculate different terms for closed form of diffusion process
         alphas = 1.0 - betas
@@ -413,7 +416,7 @@ class DDPM:
                     * noise.to(self.device)
                 ).to(torch.float32), noise.to(self.device)
 
-        def get_loss(model, x_0, t):
+        def get_loss(model, x_0, t, weights=None):
             # get the loss based on the input and timestep
 
             # get noisy1 - sqrt_alphas_cumprod_t sample
@@ -423,9 +426,9 @@ class DDPM:
             noise_pred = model(x_noisy, t)
 
             # For the regression model, the target is t with mean squared error loss
-            loss_fn = nn.MSELoss()
+            loss_fn = WMSELoss()
 
-            loss = loss_fn(noise_pred, noise)
+            loss = loss_fn(noise_pred, noise, weights)
 
             return loss
 
@@ -473,7 +476,7 @@ class DDPM:
         with torch.no_grad():
             b = x.shape[0]
             xs = []
-            # x_noisy, _ = self.forward_noise(x, torch.full((b,), t, device=self.device).long())
+            x_noisy, _ = self.forward_noise(x, torch.full((b,), t, device=self.device).long())
             x_noisy = x
             for i in reversed(range(0, t)):
                 x_noisy = self.sample(
@@ -484,7 +487,14 @@ class DDPM:
                 xs.append(x_noisy)
         return xs
 
-    def fit(self, X_train, y_train=None):
+    def fit(
+        self,
+        X_train,
+        y_train=None,
+        weights=None,
+        model_config=None,
+        device=None,
+    ):
         if self.model is None:  # allows retraining
 
             self.model = ResNetDiffusion(
@@ -494,19 +504,34 @@ class DDPM:
         optimizer = Adam(
             self.model.parameters(), lr=self.lr, weight_decay=self.weight_decay
         )
+        data = (
+            X_train
+            if weights is None
+            else list(
+                zip(
+                    torch.from_numpy(X_train).float(),
+                    torch.from_numpy(weights).float(),
+                )
+            )
+        )
         train_loader = DataLoader(
-            torch.from_numpy(X_train).float(),
+            data,
             batch_size=self.batch_size,
             shuffle=True,
             drop_last=True,
         )
 
         train_losses = []
-        for epoch in range(self.epochs):
+        for epoch in tqdm(range(self.epochs)):
             self.model.train()
             loss_ = []
 
             for x in train_loader:
+                w = None
+                if weights is not None:
+                    w = x[1]
+                    x = x[0]
+                    w = w.to(self.device)
                 x = x.to(self.device)
                 optimizer.zero_grad()
 
@@ -516,29 +541,23 @@ class DDPM:
                 ).long()
 
                 # compute the loss
-                loss = self.loss_fn(self.model, x, t)
+                loss = self.loss_fn(self.model, x, t, w)
 
                 loss.backward()
                 optimizer.step()
                 loss_.append(loss.item())
 
             train_losses.append(np.mean(np.array(loss_)))
-
-            if epoch % 5 == 0:
-                print(
-                    f"Epoch {epoch} Train Loss: {train_losses[len(train_losses)-1]}"
-                )
             if epoch > 50:
                 if (
                     train_losses[len(train_losses) - 1]
                     > train_losses[len(train_losses) - 40]
                 ):
                     break
-
-        return self
+        return self, train_losses
 
     @torch.no_grad()
-    def predict_score(self, X, reconstruction_t=None):
+    def predict_score(self, X, reconstruction_t=None, device=None):
         test_loader = DataLoader(
             torch.from_numpy(X).float(),
             batch_size=1000,
@@ -549,10 +568,10 @@ class DDPM:
         self.model.eval()
         if reconstruction_t is not None:
             self.rec_t = reconstruction_t
-        for x in test_loader:
+        for x in tqdm(test_loader, desc="Predicting"):
             x = x.to(self.device)
             # predict the timestep based on x, or the probability of each class for the classification
-            x_rec = self.reconstruct(x, self.rec_t)
+            x_rec = self.reconstruct(x, self.T)
 
             if not self.full_path:
                 pred = (
@@ -577,3 +596,11 @@ class DDPM:
         preds = np.concatenate(preds, axis=0)
 
         return preds
+
+    @torch.no_grad()
+    def raw_prediction(self, x, reconstruction_t=None):
+        self.model.eval()
+        if reconstruction_t is not None:
+            self.rec_t = reconstruction_t
+            # predict the timestep based on x, or the probability of each class for the classification
+        return self.reconstruct(x, self.rec_t)

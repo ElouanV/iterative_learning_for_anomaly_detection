@@ -8,6 +8,8 @@ from torch.optim import Adam
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
+from models.losses import WMSELoss
+
 
 class MLP(nn.Module):
     def __init__(self, hidden_sizes, num_bins=7):
@@ -143,7 +145,9 @@ class DTE:
         X_test=None,
         y_test=None,
         verbose=True,
-        give_train_losses=False,
+        weights=None,
+        model_config=None,
+        device="cuda",
     ):
         if self.model is None:  # allows retraining
             self.model = MLP(
@@ -153,8 +157,9 @@ class DTE:
         optimizer = Adam(
             self.model.parameters(), lr=self.lr, weight_decay=self.weight_decay
         )
+        data = X_train if weights is None else (X_train, weights)
         train_loader = DataLoader(
-            torch.from_numpy(X_train).float(),
+            torch.from_numpy(data).float(),
             batch_size=self.batch_size,
             shuffle=True,
             drop_last=False,
@@ -166,7 +171,13 @@ class DTE:
                 self.model.train()
                 loss_ = []
                 for x in train_loader:
-                    x = x.to(self.device)
+                    if x is tuple:
+                        x, w = x
+                        x = x.to(self.device)
+                        w = w.to(self.device)
+                    else:
+                        x = x.to(self.device)
+                        w = None
                     optimizer.zero_grad()
 
                     # sample t uniformly
@@ -175,19 +186,17 @@ class DTE:
                     ).long()
 
                     # compute the loss
-                    loss = self.compute_loss(x, t)
+                    loss = self.compute_loss(x, t, w)
 
                     loss.backward()
                     optimizer.step()
                     loss_.append(loss.item())
-                pbar.update(1)
                 train_losses.append(np.mean(np.array(loss_)))
+                pbar.update(1)
                 pbar.set_postfix({"Loss: ": "{:.4f}".format(train_losses[-1])})
-        if give_train_losses:
-            return self, train_losses
-        return self
+        return self, train_losses
 
-    def predict_score(self, X, give_preds_binned=False):
+    def predict_score(self, X, give_preds_binned=False, device="cuda"):
         test_loader = DataLoader(
             torch.from_numpy(X).float(),
             batch_size=100,
@@ -211,6 +220,62 @@ class DTE:
             preds = preds.squeeze()
         return preds
 
+    def explain(self, X, y=None, device="cuda", saving_path=None, step=10):
+
+        err = []
+        t0 = self.predict_score(X)
+        # variables individuelles
+        for i in tqdm(range(X.shape[-1]), desc="Single features"):
+            err_i = []
+            for t in range(0, self.T, step):
+                X_noisy = np.copy(X)
+                X_noisy[:, i] = (
+                    self.forward_noise(
+                        torch.tensor(X[:, i]),
+                        torch.tensor([t], dtype=torch.long),
+                    )
+                    .detach()
+                    .cpu()
+                    .numpy()
+                )
+                t_pred = self.predict_score(X_noisy)
+                err_i.append(np.abs(t_pred - t0))
+
+            # Compute the mean error for each sample
+            err_i = np.array(err_i)
+
+            err_i = np.mean(err_i)
+
+            err.append(err_i)
+
+        couple_err = np.zeros((X.shape[-1], X.shape[-1]))
+        for i in tqdm(range(X.shape[-1]), desc="Couple of features"):
+            for j in range(X.shape[-1]):
+                err_t = []
+                for t in range(0, self.T, step):
+                    X_noisy = np.copy(X)
+                    cols = X[:, [i, j]].T
+                    cols = (
+                        self.forward_noise(
+                            torch.tensor(cols),
+                            torch.tensor([t, t], dtype=torch.long),
+                        )
+                        .detach()
+                        .cpu()
+                        .numpy()
+                    )
+                    if j != i:
+                        X_noisy[:, i], X_noisy[:, j] = cols[0], cols[1]
+                    else:
+                        X_noisy[:, i] = cols[0]
+                    t_pred = self.predict_score(X_noisy)
+                    err_t.append(np.mean(t_pred - t0))
+
+                couple_err[i, j] = np.mean(err_t)
+        assert len(err) == X.shape[-1]
+        assert couple_err.shape == (X.shape[-1], X.shape[-1])
+        return err, couple_err
+
 
 class DTECategorical(DTE):
     def __init__(
@@ -218,12 +283,13 @@ class DTECategorical(DTE):
         seed=0,
         model_name="DTE_categorical",
         hidden_size=[256, 512, 256],
-        epochs=10,
+        epochs=400,
         batch_size=64,
         lr=1e-4,
         weight_decay=5e-4,
         T=400,
         num_bins=7,
+        device=None,
     ):
         if num_bins < 2:
             raise ValueError("num_bins must be greater than or equal to 2")
@@ -238,9 +304,10 @@ class DTECategorical(DTE):
             weight_decay,
             T,
             num_bins,
+            device=device,
         )
 
-    def compute_loss(self, x_0, t):
+    def compute_loss(self, x_0, t, weights=None):
         # get the loss based on the input and timestep
 
         # get noisy sample
@@ -254,7 +321,7 @@ class DTECategorical(DTE):
             t, T=self.T, device=self.device, num_bins=self.num_bins
         )
 
-        loss = nn.CrossEntropyLoss()(t_pred, target)
+        loss = nn.CrossEntropyLoss(weight=weights)(t_pred, target)
 
         return loss
 
@@ -283,7 +350,7 @@ class DTEInverseGamma(DTE):
             num_bins=0,
         )
 
-    def compute_loss(self, x_0, t):
+    def compute_loss(self, x_0, t, weights=None):
         # get the loss based on the input and timestep
         _, dim = x_0.shape
         eps = 1e-5
@@ -298,6 +365,7 @@ class DTEInverseGamma(DTE):
         log_likelihood = (0.5 * dim - 1) * torch.log(
             beta_pred + eps
         ) - beta_pred / (var_target)
+        log_likelihood = log_likelihood * weights
         loss = -log_likelihood.mean()
 
         return loss
@@ -327,7 +395,7 @@ class DTEGaussian(DTE):
             0,
         )
 
-    def compute_loss(self, x_0, t):
+    def compute_loss(self, x_0, t, weights=None):
         # get the loss based on the input and timestep
 
         # get noisy sample
@@ -339,7 +407,7 @@ class DTEGaussian(DTE):
         t_pred = t_pred.squeeze()
         target = t.float()
 
-        loss = nn.MSELoss()(t_pred, target)
+        loss = WMSELoss(t_pred, target, weights=weights)
 
         return loss
 
@@ -369,7 +437,16 @@ class DTEBagging:
 
         self.models = []
 
-    def fit(self, X_train, y_train=None, X_test=None, Y_test=None):
+    def fit(
+        self,
+        X_train,
+        y_train=None,
+        X_test=None,
+        Y_test=None,
+        weights=None,
+        model_config=None,
+        device=None,
+    ):
         for _ in range(self.num_bags):
             if self.num_bags > 1:
                 indices = np.arange(len(X_train))
@@ -389,12 +466,17 @@ class DTEBagging:
             self.models.append(model)
 
             model.fit(
-                X_train=X_train, y_train=y_train, X_test=X_test, y_test=Y_test
+                X_train=X_train,
+                y_train=y_train,
+                X_test=X_test,
+                y_test=Y_test,
+                weights=weights,
+                model_config=model_config,
             )
 
         return self
 
-    def predict_score(self, X):
+    def predict_score(self, X, device="cuda"):
         total = []
 
         # compute prediction for all models
