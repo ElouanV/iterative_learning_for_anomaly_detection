@@ -67,7 +67,6 @@ def train_model(
 
 def run_config(cfg, logger, device):
     utils = Utils()  # utils function
-    cfg.run_id = "ddpm_explainability"
     utils.set_seed(cfg.random_seed)
     saving_path, experiment_name = setup_experiment(cfg)
     data = get_dataset(cfg)

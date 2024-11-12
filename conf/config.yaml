@@ -2,7 +2,7 @@ random_seed: 0
 save_fig: True
 output_path: 'results'
 device: 'auto'
-mode: 'debug' # 'benchmark' or 'debug'
+mode: 'benchmark' # 'benchmark' or 'debug'
 
 
 realistic_synthetic_mode: null
