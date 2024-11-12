@@ -1,0 +1,4 @@
+data_path: data_adbench/11_donors.npz
+data_type: tabular
+dataset_name: 11_donors
+test_ratio: 0.2

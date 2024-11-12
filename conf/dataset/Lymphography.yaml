@@ -1,0 +1,4 @@
+data_path: data_adbench/21_Lymphography.npz
+data_type: tabular
+dataset_name: 21_Lymphography
+test_ratio: 0.2

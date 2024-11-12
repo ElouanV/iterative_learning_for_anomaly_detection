@@ -4,7 +4,7 @@ from pathlib import Path
 import numpy as np
 
 from dataset.data_generator import DataGenerator
-from models.ddpm.ddpm import DDPM
+from models.ddpm import DDPM
 from models.deepsvdd.deepSVDD import DeepSVDD
 from models.dte import DTECategorical, DTEInverseGamma
 
@@ -62,7 +62,7 @@ def count_ano(indices, y):
     return sum(y[indices])
 
 
-def pred_from_scores(scores, num_anomalies):
+def pred_from_scores(scores, num_anomalies: NotImplemented):
     """
     retourne une prédiction y où
     y[i] = 1 si scores[i] est l'un des num_anomalies plus grand score
@@ -115,21 +115,12 @@ def get_dataset(cfg: Path):
 
     datagenerator.dataset = cfg.dataset.dataset_name  # specify the dataset name
     data = datagenerator.generator(
-        la=0, max_size=50000
+        la=0,
+        max_size=50000,
+        realistic_synthetic_mode=cfg.realistic_synthetic_mode,
+        alpha=cfg.alpha,
+        percentage=cfg.percentage,
     )  # maximum of 50,000 data points are available
-    if cfg.training_method.name != "semi-supervised":
-        X = data["X_test"]
-        y = data["y_test"]
-
-        indices = np.arange(len(X))
-        subset = np.random.choice(indices, size=len(indices), replace=True)
-
-        data = {}
-        data["X_train"] = X[subset]
-        data["y_train"] = y[subset]
-
-        data["X_test"] = X
-        data["y_test"] = y
     return data
 
 
@@ -147,10 +138,17 @@ def setup_experiment(cfg: dict):
         cfg.output_path,
         str(cfg.run_id),
         experiment_name,
-        cfg.dataset.dataset_name,
+        (
+            cfg.dataset.dataset_name
+            + (
+                f"_{cfg.realistic_synthetic_mode}"
+                if cfg.realistic_synthetic_mode
+                else ""
+            )
+        ),
     )
     os.makedirs(saving_path, exist_ok=True)
-    return saving_path
+    return saving_path, experiment_name
 
 
 def check_cuda(logger, device=None):
@@ -176,3 +174,38 @@ def low_density_anomalies(test_log_probs, num_anomalies):
     preds = np.zeros(len(test_log_probs))
     preds[anomaly_indices] = 1
     return preds
+
+
+def dcg_score_matrix(importance_scores, relevance_matrix):
+    importance_scores = np.array(importance_scores)
+    relevance_matrix = np.array(relevance_matrix)
+    importance_scores = importance_scores.squeeze()
+    relevance_matrix = relevance_matrix.squeeze()
+    assert (
+        importance_scores.shape == relevance_matrix.shape
+    ), "importance_scores and relevance_matrix must have the same shape"
+
+    sorted_indices = np.argsort(importance_scores, axis=1)[:, ::-1]
+    sorted_relevance = np.take_along_axis(
+        relevance_matrix, sorted_indices, axis=1
+    )
+    ranks = np.arange(1, importance_scores.shape[1] + 1)
+    dcg_scores = np.sum(sorted_relevance / np.log2(ranks + 1), axis=1)
+
+    return dcg_scores
+
+
+def idcg_score_matrix(relevance_matrix):
+    relevance_matrix = np.array(relevance_matrix)
+    sorted_relevance = np.sort(relevance_matrix, axis=1)[:, ::-1]
+    ranks = np.arange(1, relevance_matrix.shape[1] + 1)
+    idcg_scores = np.sum(sorted_relevance / np.log2(ranks + 1), axis=1)
+    return idcg_scores
+
+
+def nDCG(importance_scores, relevance_matrix):
+    dcg_scores = dcg_score_matrix(importance_scores, relevance_matrix)
+    idcg_scores = idcg_score_matrix(relevance_matrix)
+    ndcg_scores = np.where(idcg_scores == 0, 0, dcg_scores / idcg_scores)
+
+    return ndcg_scores

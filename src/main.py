@@ -18,7 +18,7 @@ from viz.training_viz import plot_score_density
 def run_config(cfg, logger, device):
     utils = Utils()  # utils function
     utils.set_seed(cfg.random_seed)
-    saving_path = setup_experiment(cfg)
+    saving_path, experiment_name = setup_experiment(cfg)
     if Path(saving_path, "experiment_config.yaml").exists():
         logger.info(
             f"Experiment with random seed {cfg.random_seed} already exists, skipping"

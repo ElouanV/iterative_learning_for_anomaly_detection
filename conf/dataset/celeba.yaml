@@ -1,0 +1,4 @@
+data_path: data_adbench/8_celeba.npz
+data_type: image
+dataset_name: 8_celeba
+test_ratio: 0.2

@@ -1,0 +1,4 @@
+data_path: data_adbench/46_WPBC.npz
+data_type: tabular
+dataset_name: 46_WPBC
+test_ratio: 0.2

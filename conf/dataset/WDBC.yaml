@@ -1,0 +1,4 @@
+data_path: data_adbench/43_WDBC.npz
+data_type: tabular
+dataset_name: 43_WDBC
+test_ratio: 0.2

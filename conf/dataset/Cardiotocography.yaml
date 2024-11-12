@@ -1,0 +1,4 @@
+data_path: data_adbench/7_Cardiotocography.npz
+data_type: tabular
+dataset_name: 7_Cardiotocography
+test_ratio: 0.2

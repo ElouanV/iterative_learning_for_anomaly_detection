@@ -1,0 +1,4 @@
+data_path: data_adbench/39_vertebral.npz
+data_type: tabular
+dataset_name: 39_vertebral
+test_ratio: 0.2

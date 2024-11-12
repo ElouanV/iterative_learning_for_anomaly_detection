@@ -1,0 +1,4 @@
+data_path: data_adbench/32_shuttle.npz
+data_type: tabular
+dataset_name: 32_shuttle
+test_ratio: 0.2

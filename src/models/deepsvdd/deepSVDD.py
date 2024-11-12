@@ -19,8 +19,8 @@ class DeepSVDD(object):
         R: Hypersphere radius R.
         c: Hypersphere center c.
         net_name: A string indicating the name of the neural network to use.
-        net: The neural network \phi.
-        ae_net: The autoencoder network corresponding to \phi for network weights pretraining.
+        net: The neural network phi.
+        ae_net: The autoencoder network corresponding to phi for network weights pretraining.
         trainer: DeepSVDDTrainer to train a Deep SVDD model.
         optimizer_name: A string indicating the optimizer to use for training the Deep SVDD network.
         ae_trainer: AETrainer to train an autoencoder in pretraining.
@@ -61,7 +61,7 @@ class DeepSVDD(object):
         }
 
     def set_network(self, net_name, input_dim=None, model_config: dict = None):
-        """Builds the neural network \phi."""
+        """Builds the neural network phi."""
         self.net_name = net_name
         self.net = build_network(net_name, input_dim, model_config=model_config)
 
@@ -140,7 +140,7 @@ class DeepSVDD(object):
         device: str = "cuda",
         n_jobs_dataloader: int = 0,
     ):
-        """Pretrains the weights for the Deep SVDD network \phi via autoencoder."""
+        """Pretrains the weights for the Deep SVDD network phi via autoencoder."""
 
         self.ae_net = build_autoencoder(self.net_name)
         self.ae_optimizer_name = optimizer_name

@@ -1,0 +1,4 @@
+data_path: data_adbench/22_magic.gamma.npz
+data_type: tabular
+dataset_name: 22_magic
+test_ratio: 0.2

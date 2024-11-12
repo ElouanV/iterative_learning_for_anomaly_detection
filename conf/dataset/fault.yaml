@@ -1,0 +1,4 @@
+data_path: data_adbench/12_fault.npz
+data_type: tabular
+dataset_name: 12_fault
+test_ratio: 0.2

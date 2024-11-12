@@ -1,0 +1,4 @@
+data_path: data_adbench/25_musk.npz
+data_type: tabular
+dataset_name: 25_musk
+test_ratio: 0.2

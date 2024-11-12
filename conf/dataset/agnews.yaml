@@ -1,0 +1,4 @@
+data_path: data_adbench/53_agnews.npz
+data_type: NLP
+dataset_name: 53_agnews
+test_ratio: 0.2

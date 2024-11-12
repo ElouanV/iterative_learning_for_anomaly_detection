@@ -1,3 +1,4 @@
-dataset_name: 'census'
-dataset_path: 'data_adbench/9_census.npz'
+data_path: data_adbench/9_census.npz
+data_type: tabular
+dataset_name: 9_census
 test_ratio: 0.2

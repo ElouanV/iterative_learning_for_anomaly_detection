@@ -6,13 +6,18 @@ Copyright (c) 2022, Mickey (Minqi)
 All rights reserved.
 """
 
+import logging
 import os
 import random
 from math import ceil
 
 import numpy as np
+import pandas as pd
 import pkg_resources
 from adbench.myutils import Utils
+from copulas.multivariate import VineCopula
+from copulas.univariate import GaussianKDE
+from sklearn.mixture import GaussianMixture
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 
@@ -94,6 +99,131 @@ class DataGenerator:
 
         return X, y
 
+    def generate_realistic_synthetic(
+        self, X, y, realistic_synthetic_mode, alpha: int, percentage: float
+    ):
+        """
+        Currently, four types of realistic synthetic outliers can be generated:
+        1. local outliers: where normal data follows the GMM distribuion, and anomalies follow the GMM
+        distribution with modified covariance
+        2. global outliers: where normal data follows the GMM distribuion, and anomalies follow the uniform distribution
+        3. dependency outliers: where normal data follows the vine coupula distribution, and anomalies
+        follow the independent distribution captured by GaussianKDE
+        4. cluster outliers: where normal data follows the GMM distribuion, and anomalies follow the
+        GMM distribution with modified mean
+
+        :param X: input X
+        :param y: input y
+        :param realistic_synthetic_mode: the type of generated outliers
+        :param alpha: the scaling parameter for controling the generated local and cluster anomalies
+        :param percentage: controling the generated global anomalies
+        """
+        logger = logging.getLogger(__name__)
+        logger.info(
+            f"Generating realistic synthetic outliers with mode: {realistic_synthetic_mode}"
+        )
+
+        if realistic_synthetic_mode in [
+            "local",
+            "cluster",
+            "dependency",
+            "global",
+        ]:
+            pass
+        else:
+            raise NotImplementedError
+
+        # the number of normal data and anomalies
+        pts_n = len(np.where(y == 0)[0])
+        pts_a = len(np.where(y == 1)[0])
+
+        # only use the normal data to fit the model
+        X = X[y == 0]
+        y = y[y == 0]
+
+        # generate the synthetic normal data
+        if realistic_synthetic_mode in ["local", "cluster", "global"]:
+            # select the best n_components based on the BIC value
+            metric_list = []
+            n_components_list = list(np.arange(1, 10))
+
+            for n_components in n_components_list:
+                gm = GaussianMixture(
+                    n_components=n_components, random_state=self.seed
+                ).fit(X)
+                metric_list.append(gm.bic(X))
+
+            best_n_components = n_components_list[np.argmin(metric_list)]
+
+            # refit based on the best n_components
+            gm = GaussianMixture(
+                n_components=best_n_components, random_state=self.seed
+            ).fit(X)
+
+            # generate the synthetic normal data
+            X_synthetic_normal = gm.sample(pts_n)[0]
+
+        # we found that copula function may occur error in some datasets
+        elif realistic_synthetic_mode == "dependency":
+            # sampling the feature since copulas method may spend too long to fit
+            if X.shape[1] > 50:
+                idx = np.random.choice(np.arange(X.shape[1]), 50, replace=False)
+                X = X[:, idx]
+
+            copula = VineCopula("center")  # default is the C-vine copula
+            copula.fit(pd.DataFrame(X))
+
+            # sample to generate synthetic normal data
+            X_synthetic_normal = copula.sample(pts_n).values
+
+        else:
+            pass
+
+        # generate the synthetic abnormal data
+        if realistic_synthetic_mode == "local":
+            # generate the synthetic anomalies (local outliers)
+            gm.covariances_ = alpha * gm.covariances_
+            X_synthetic_anomalies = gm.sample(pts_a)[0]
+
+        elif realistic_synthetic_mode == "cluster":
+            # generate the clustering synthetic anomalies
+            gm.means_ = alpha * gm.means_
+            X_synthetic_anomalies = gm.sample(pts_a)[0]
+
+        elif realistic_synthetic_mode == "dependency":
+            X_synthetic_anomalies = np.zeros((pts_a, X.shape[1]))
+
+            # using the GuassianKDE for generating independent feature
+            for i in range(X.shape[1]):
+                kde = GaussianKDE()
+                kde.fit(X[:, i])
+                X_synthetic_anomalies[:, i] = kde.sample(pts_a)
+
+        elif realistic_synthetic_mode == "global":
+            # generate the synthetic anomalies (global outliers)
+            X_synthetic_anomalies = []
+
+            for i in range(X_synthetic_normal.shape[1]):
+                low = np.min(X_synthetic_normal[:, i]) * (1 + percentage)
+                high = np.max(X_synthetic_normal[:, i]) * (1 + percentage)
+
+                X_synthetic_anomalies.append(
+                    np.random.uniform(low=low, high=high, size=pts_a)
+                )
+
+            X_synthetic_anomalies = np.array(X_synthetic_anomalies).T
+
+        else:
+            pass
+
+        X = np.concatenate((X_synthetic_normal, X_synthetic_anomalies), axis=0)
+        y = np.append(
+            np.repeat(0, X_synthetic_normal.shape[0]),
+            np.repeat(1, X_synthetic_anomalies.shape[0]),
+        )
+
+        return X, y
+
     def generator(
         self,
         X=None,
@@ -104,6 +234,9 @@ class DataGenerator:
         noise_type=None,
         duplicate_times: int = 2,
         max_size=10000,
+        realistic_synthetic_mode=None,
+        alpha: int = 5,
+        percentage=0.1,
     ):
         """
         la: labeled anomalies, can be either the ratio of labeled anomalies or the number of labeled anomalies
@@ -138,20 +271,21 @@ class DataGenerator:
                     ),
                     allow_pickle=True,
                 )
-            elif self.dataset in [
-                "synthetic_a1",
-                "synthetic_a2",
-                "synthetic_a3",
-                "synthetic_aot",
-            ]:
+            # if 'synthetic' is a substring of the dataset name, then it is a synthetic dataset
+            elif "synthetic" in self.dataset:
                 data = np.load(
                     self.config.dataset.dataset_path, allow_pickle=True
                 )
                 # if len(np.unique(data["y"])) > 2:
                 #     data["y"][data["y"] > 0] = 1
-
+            else:
+                raise NotImplementedError(f"Dataset {self.dataset} is not supported!")
             X = data["X"]
             y = data["y"]
+            if "explanation" in data.keys():
+                explanation = data["explanation"]
+            else:
+                explanation = np.zeros_like(X)
 
         # if the dataset is too small, generating duplicate smaples up to n_samples_threshold
         if len(y) < self.n_samples_threshold and self.generate_duplicates:
@@ -162,6 +296,7 @@ class DataGenerator:
             )
             X = X[idx_duplicate]
             y = y[idx_duplicate]
+            explanation = explanation[idx_duplicate]
 
         # if the dataset is too large, subsampling for considering the computational cost
         if len(y) > max_size:
@@ -172,6 +307,53 @@ class DataGenerator:
             )
             X = X[idx_sample]
             y = y[idx_sample]
+            explanation = explanation[idx_sample]
+
+        if realistic_synthetic_mode is not None:
+            # we save the generated dependency anomalies, since the Vine Copula could spend too long for generation
+            if realistic_synthetic_mode == "dependency":
+                filepath = os.path.join(
+                    os.path.dirname(os.path.abspath(__file__)), "synthetic"
+                )
+                filename = (
+                    "dependency_anomalies_"
+                    + self.dataset
+                    + "_"
+                    + str(self.seed)
+                    + ".npz"
+                )
+
+                if not os.path.exists(filepath):
+                    os.makedirs(filepath)
+                try:
+                    data_dependency = np.load(
+                        os.path.join(filepath, filename), allow_pickle=True
+                    )
+                    X = data_dependency["X"]
+                    y = data_dependency["y"]
+                except FileNotFoundError:
+                    # raise NotImplementedError
+                    print("Generating dependency anomalies...")
+                    X, y = self.generate_realistic_synthetic(
+                        X,
+                        y,
+                        realistic_synthetic_mode=realistic_synthetic_mode,
+                        alpha=alpha,
+                        percentage=percentage,
+                    )
+                    np.savez_compressed(
+                        os.path.join(filepath, filename), X=X, y=y
+                    )
+                    pass
+
+            else:
+                X, y = self.generate_realistic_synthetic(
+                    X,
+                    y,
+                    realistic_synthetic_mode=realistic_synthetic_mode,
+                    alpha=alpha,
+                    percentage=percentage,
+                )
 
         # show the statistic
         self.utils.data_description(X=X, y=y)
@@ -183,10 +365,25 @@ class DataGenerator:
                 y_train = y.copy()
                 X_test = X.copy()
                 y_test = y.copy()
+                explanation_train = explanation.copy()
+                explanation_test = explanation.copy()
             else:
-                X_train, X_test, y_train, y_test = train_test_split(
-                    X, y, test_size=self.test_size, shuffle=True, stratify=y
+                (
+                    X_train,
+                    X_test,
+                    y_train,
+                    y_test,
+                    explanation_train,
+                    epxlanation_test,
+                ) = train_test_split(
+                    X,
+                    y,
+                    explanation,
+                    test_size=self.test_size,
+                    shuffle=True,
+                    stratify=y,
                 )
+
         else:
             indices = np.arange(len(X))
             normal_indices = indices[y == 0]
@@ -201,8 +398,10 @@ class DataGenerator:
 
             X_train = X[train_indices]
             y_train = y[train_indices]
+            explanation_train = explanation[train_indices]
             X_test = X[test_indices]
             y_test = y[test_indices]
+            explanation_test = explanation[test_indices]
 
         # standard scaling
         if scale:
@@ -265,4 +464,6 @@ class DataGenerator:
             "y_train": y_train,
             "X_test": X_test,
             "y_test": y_test,
+            "explanation_train": explanation_train,
+            "explanation_test": explanation_test,
         }

@@ -1,0 +1,4 @@
+data_path: data_adbench/36_speech.npz
+data_type: tabular
+dataset_name: 36_speech
+test_ratio: 0.2

@@ -6,7 +6,9 @@ import numpy as np
 import seaborn as sns
 
 
-def barplot(scores, xlabel="", ylabel="", title="", file_path="res/barplot"):
+def barplot(
+    scores, exp_name, xlabel="", ylabel="", title="", file_path="res/barplot"
+):
     """
     Takes:
     |   scores : the scores to plot (should be a score per feature)
@@ -22,15 +24,19 @@ def barplot(scores, xlabel="", ylabel="", title="", file_path="res/barplot"):
     plt.ylabel(ylabel)
     plt.title(title)
     plt.grid()
-    plt.tight_layout()
-    plt.grid()
 
     plt.savefig(file_path)
     plt.show()
 
 
 def plot_f1_and_loss(
-    data, dataset_name, X, num_anomalies, percentage_keep, num_iteration
+    data,
+    dataset_name,
+    X,
+    exp_name,
+    num_anomalies,
+    percentage_keep,
+    num_iteration,
 ):
 
     # Create a figure with 2 subplots side by side
@@ -43,7 +49,7 @@ def plot_f1_and_loss(
     )
     axs[0].set_xlabel("itération")
     axs[0].set_ylabel("score")
-    axs[0].set_title("Evolution scores")
+    axs[0].set_title(f"Evolution scores, {exp_name}")
     axs[0].grid()
     axs[0].legend()
 
@@ -85,7 +91,7 @@ def plot_f1_and_loss(
     plt.show()
 
 
-def plot_tsne(data, y_test_anomaly, p, saving_path):
+def plot_tsne(data, y_test_anomaly, p, exp_name, saving_path):
     from sklearn.manifold import TSNE
 
     tsne = TSNE(n_components=2, random_state=0)
@@ -122,22 +128,31 @@ def plot_tsne(data, y_test_anomaly, p, saving_path):
         label="false positive",
     )
     plt.legend()
+    plt.ylabel("t-SNE 2")
+    plt.xlabel("t-SNE 1")
+    plt.title(f"TSNE plot of the test set, exp: {exp_name}")
     plt.savefig(Path(saving_path, "tsne.png"))
     plt.show()
 
 
-def plot_anomaly_score_distribution(scores, saving_path):
+def plot_anomaly_score_distribution(
+    scores, saving_path, exp_name, threshold=None
+):
     plt.figure(figsize=(10, 10))
     sns.kdeplot(scores, label="Anomaly score distribution")
-
+    if threshold is not None:
+        plt.axvline(threshold, color="r", linestyle="--", label="Threshold")
     plt.legend()
     plt.grid()
+    plt.xlabel("Anomaly score")
+    plt.ylabel("Density")
+    plt.title(f"Anomaly score distribution, {exp_name}")
     plt.savefig(Path(saving_path, "anomaly_score_distribution.png"))
     plt.show()
 
 
 def plot_anomaly_score_distribution_split(
-    scores, y_test_anomaly, p, saving_path
+    scores, y_test_anomaly, exp_name, p, saving_path
 ):
     plt.figure(figsize=(10, 10))
     sns.kdeplot(scores[y_test_anomaly == 0], label="Normal score distribution")
@@ -145,22 +160,34 @@ def plot_anomaly_score_distribution_split(
     sns.kdeplot(scores[p == 1], label="Detected anomaly score distribution")
     plt.legend()
     plt.grid()
+    plt.xlabel("Anomaly score")
+    plt.ylabel("Density")
+    plt.title(f"Anomaly score distribution, {exp_name}")
     plt.savefig(Path(saving_path, "anomaly_score_distribution_split.png"))
     plt.show()
     plt.clf()
 
 
-def plot_score_density(scores, saving_path):
+def plot_score_density(scores, exp_name, saving_path):
     plt.figure(figsize=(10, 10))
     sns.kdeplot(scores, label="Anomaly score distribution")
     plt.grid()
     plt.legend()
+    plt.xlabel("Anomaly score")
+    plt.ylabel("Density")
+    plt.title(f"Anomaly score distribution, {exp_name}")
     plt.savefig(Path(saving_path, "score_density.png"))
     plt.show()
 
 
 def plot_feature_importance(
-    scores, feature_names=None, xlabel="", ylabel="", title="", saving_path=""
+    scores,
+    exp_name,
+    expected_explanation=None,
+    feature_names=None,
+    xlabel="",
+    ylabel="",
+    saving_path="",
 ):
     """
     Takes:
@@ -171,23 +198,39 @@ def plot_feature_importance(
     |   plot the scores of the different feature on a barplot and saves it in file_path
     """
     plt.figure(figsize=(10, 6))
-    plt.bar(range(1, len(scores) + 1), scores, align="center")
-
+    # Normalize the scores
+    scores = np.abs(scores)
+    scores = scores / np.sum(scores)
+    plt.bar(range(0, len(scores)), scores.squeeze(), label="Feature importance")
+    if expected_explanation is not None:
+        plt.bar(
+            range(0, len(scores)),
+            expected_explanation.squeeze(),
+            alpha=0.5,
+            label="Expected explanation",
+        )
     if feature_names is not None:
         plt.xticks(range(1, len(scores) + 1), feature_names, rotation=90)
 
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
-    plt.title(title)
+    plt.legend()
+    plt.title(f"Feature importance, {exp_name}")
     plt.grid()
     plt.tight_layout()
 
-    plt.savefig(os.path.join(saving_path, "feature_importance.png"))
+    plt.savefig(os.path.join(saving_path, f"feature_importance_{exp_name}.png"))
     plt.show()
+    plt.close()
 
 
 def plot_couple_feature_importance_matrix(
-    scores, feature_names='auto', xlabel="", ylabel="", title="", saving_path=""
+    scores,
+    exp_name,
+    feature_names="auto",
+    xlabel="",
+    ylabel="",
+    saving_path="",
 ):
     """
     Takes:
@@ -204,37 +247,91 @@ def plot_couple_feature_importance_matrix(
 
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
-    plt.title(title)
+    plt.title("Couple feature importance matrix, " + exp_name)
     plt.grid()
     plt.tight_layout()
 
-    plt.savefig(os.path.join(saving_path, "couple_feature_importance_matrix.png"))
+    plt.savefig(
+        os.path.join(saving_path, "couple_feature_importance_matrix.png")
+    )
     plt.show()
 
 
-def plot_nmf(nmf_w, nmf_h, saving_path):
+def plot_nmf(nmf_w, nmf_h, exp_name, saving_path):
     # Plot NMF results
     plt.figure(figsize=(10, 4))
     plt.subplot(1, 2, 1)
-    sns.heatmap(nmf_w, cmap="viridis")
+    sns.heatmap(
+        nmf_w,
+        cmap="viridis",
+    )
     plt.title("NMF W matrix")
     plt.xlabel("Patterns")
-    plt.ylabel("Transactions")
+    plt.ylabel("Anomaly")
     plt.subplot(1, 2, 2)
-    sns.heatmap(nmf_h, cmap="viridis")
-    plt.title("NMF H matrix")
+    sns.heatmap(nmf_h, cmap="viridis", xticklabels=range(1, nmf_h.shape[1] + 1))
+    plt.title(f"NMF H matrix, {exp_name}")
     plt.xlabel("Features")
     plt.ylabel("Patterns")
     plt.savefig(os.path.join(saving_path, "nmf.png"))
     plt.show()
 
 
-def reconstruction_error_boxplot(reconstruction_error, saving_path):
+def reconstruction_error_boxplot(reconstruction_error, exp_name, saving_path):
     # Box plot of the error
+    plt.figure(figsize=(10, 6))
     plt.boxplot(reconstruction_error)
     plt.xlabel("Feature")
     plt.ylabel("Mean Error")
-    plt.title("Box plot of the reconstruction error for each feature")
+    plt.title(
+        f"Box plot of the reconstruction error for each feature, {exp_name}"
+    )
     plt.grid()
     plt.savefig(os.path.join(saving_path, "reconstruction_error_boxplot.png"))
+    plt.show()
+
+
+def reconstruction_error_plot(
+    anomaly_reconstruction, normal_reconstruction, exp_name, saving_path
+):
+    plt.figure(figsize=(10, 6))
+    anomaly_mean_error = np.mean(anomaly_reconstruction, axis=0)
+    normal_mean_error = np.mean(normal_reconstruction, axis=0)
+    print(anomaly_mean_error.shape)
+    plt.bar(
+        range(anomaly_mean_error.shape[0]),
+        anomaly_mean_error,
+        label="Anomaly",
+        color="orange",
+        alpha=0.3,
+    )
+    plt.bar(
+        range(normal_mean_error.shape[0]),
+        normal_mean_error,
+        label="Normal",
+        alpha=0.3,
+        color="green",
+    )
+    plt.xlabel("Feature")
+    plt.legend()
+    plt.ylabel("Mean Error")
+    plt.title(
+        f"Mean Absolute reconstruction error for each feature, {exp_name}"
+    )
+    plt.grid()
+    plt.savefig(os.path.join(saving_path, "reconstruction_error.png"))
+    plt.show()
+
+
+def iterative_training_score_evolution(iteration_scores, exp_name, saving_path):
+    plt.figure(figsize=(10, 6))
+
+    for i, scores in enumerate(iteration_scores):
+        sns.kdeplot(scores, label=f"Iteration {i}")
+    plt.legend()
+    plt.grid()
+    plt.title(f"Anomaly score evolution during iterative training, {exp_name}")
+    plt.savefig(
+        os.path.join(saving_path, "iterative_training_score_evolution.png")
+    )
     plt.show()

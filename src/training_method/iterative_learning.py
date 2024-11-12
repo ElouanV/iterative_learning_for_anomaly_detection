@@ -8,15 +8,17 @@ import numpy as np
 from sklearn.metrics import f1_score, roc_auc_score
 
 from utils import pred_from_scores, select_model
+from viz.training_viz import iterative_training_score_evolution
 
 
 class SamplingIterativeLearning:
-    def __init__(self, conf: dict, saving_path: Path = None):
+    def __init__(self, conf: dict, exp_name: str, saving_path: Path = None):
         self.model_config = conf.model
         self.conf = conf
         self.update_trainset = self.get_sampling_method(conf)
         self.logger = logging.getLogger(__name__)
         self.saving_path = saving_path
+        self.exp_name = exp_name
 
     @staticmethod
     def get_sampling_method(conf: dict):
@@ -54,6 +56,7 @@ class SamplingIterativeLearning:
             "roc_auc_scores": [],
             "nb_anomalies": [],
         }
+        iteration_scores = []
         for iteration in range(max_iter):
             train_log["nb_anomalies"].append(
                 np.sum(current_y) / np.sum(y_train)
@@ -71,10 +74,12 @@ class SamplingIterativeLearning:
                 os.path.join(self.saving_path, f"scores_{iteration}.npy"),
                 scores,
             )
+
+            iteration_scores.append(scores)
             # Evaluation
             if X_eval is not None and y_eval is not None:
                 scores = current_model.predict_score(X_eval)
-                nb_anomalies = np.sum(y_eval)
+                nb_anomalies = int(np.sum(y_eval))
                 y_pred = pred_from_scores(scores, nb_anomalies)
                 f1 = f1_score(y_eval, y_pred)
                 self.logger.info(f"F1 score at iteration {iteration}: {f1}")
@@ -85,6 +90,7 @@ class SamplingIterativeLearning:
                 train_log["f1_scores"].append(f1)
                 train_log["roc_auc_scores"].append(roc)
         self.plot_training_log(train_log)
+        iterative_training_score_evolution(iteration_scores, exp_name=self.exp_name, saving_path=self.saving_path)
         return current_model, train_log
 
     def plot_training_log(self, train_log):

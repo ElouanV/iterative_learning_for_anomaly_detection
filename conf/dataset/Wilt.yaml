@@ -1,0 +1,4 @@
+data_path: data_adbench/44_Wilt.npz
+data_type: tabular
+dataset_name: 44_Wilt
+test_ratio: 0.2

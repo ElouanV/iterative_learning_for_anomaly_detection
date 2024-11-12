@@ -1,6 +1,8 @@
 # This code is from https://github.com/vicliv/DTE by (V. Livernoche, V. Jain, Y. Hezaveh, S. Ravanbakhsh)
 
 
+from pathlib import Path
+
 import numpy as np
 import torch
 from torch import nn
@@ -9,6 +11,8 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from models.losses import WMSELoss
+from viz.training_viz import (plot_couple_feature_importance_matrix,
+                              plot_feature_importance)
 
 
 class MLP(nn.Module):
@@ -324,6 +328,75 @@ class DTECategorical(DTE):
         loss = nn.CrossEntropyLoss(weight=weights)(t_pred, target)
 
         return loss
+
+    def instance_explanation(
+        self, x, expected_explanation, saving_path, exp_name, step=10
+    ):
+        if len(x.shape) == 1:
+            x = x.reshape(1, -1)
+
+        nb_samples, nb_features = x.shape
+        err = np.zeros((nb_samples, nb_features))
+        # TODO
+        t0 = self.predict_score(x)
+        # variables individuelles
+        for i in tqdm(range(x.shape[-1]), desc="Single features"):
+            err_i = []
+            for t in range(0, self.T, step):
+                X_noisy = np.copy(x)
+                X_noisy[:, i] = (
+                    self.forward_noise(
+                        torch.tensor(x[:, i]),
+                        torch.tensor([t], dtype=torch.long),
+                    )
+                    .detach()
+                    .cpu()
+                    .numpy()
+                )
+                t_pred = self.predict_score(X_noisy)
+                err_i.append(np.abs(t_pred - t0))
+
+            # Compute the mean error across timesteps for this feature
+            err_i = np.array(err_i)  # Shape: (num_timesteps, nb_samples)
+            mean_err_i = np.mean(err_i, axis=0)
+            err[:, i] = mean_err_i
+        for i in range(x.shape[0]):
+
+            plot_feature_importance(
+                err[i, :],
+                expected_explanation=expected_explanation[i],
+                exp_name=exp_name,
+                saving_path=saving_path,
+            )
+        return np.array(err).squeeze()
+
+    def global_explanation(
+        self,
+        X,
+        y_pred,
+        experiment_name,
+        saving_path,
+        plot=True,
+        step=10,
+        **kwargs
+    ):
+        X = X[y_pred == 1]
+        feature_score, couple_feature_score = self.explain(X, step=step)
+        if plot:
+            plot_feature_importance(
+                feature_score, exp_name=experiment_name, saving_path=saving_path
+            )
+            plot_couple_feature_importance_matrix(
+                couple_feature_score,
+                exp_name=experiment_name,
+                saving_path=saving_path,
+            )
+
+        np.save(Path(saving_path, "feature_score.npy"), feature_score)
+        np.save(
+            Path(saving_path, "couple_feature_score.npy"), couple_feature_score
+        )
+        return feature_score, couple_feature_score
 
 
 class DTEInverseGamma(DTE):

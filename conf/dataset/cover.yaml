@@ -1,0 +1,4 @@
+data_path: data_adbench/10_cover.npz
+data_type: tabular
+dataset_name: 10_cover
+test_ratio: 0.2

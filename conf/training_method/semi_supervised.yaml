@@ -1,1 +1,3 @@
 name: 'semi-supervised'
+sampling_method: None
+ratio: None

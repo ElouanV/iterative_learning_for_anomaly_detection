@@ -1,0 +1,4 @@
+data_path: data_adbench/23_mammography.npz
+data_type: tabular
+dataset_name: 23_mammography
+test_ratio: 0.2

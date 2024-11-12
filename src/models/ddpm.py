@@ -9,17 +9,22 @@ On Diffusion Modeling for Anomaly Detection - Diffusion Time Estimation
 """
 
 import math
+from pathlib import Path
 from typing import Callable, Type, Union
 
 import numpy as np
 import torch
 import torch.nn.functional as F
+from matplotlib import pyplot as plt
+from sklearn.decomposition import NMF
 from torch import Tensor, nn
 from torch.optim import Adam
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from models.losses import WMSELoss
+from models.base_model import BaseModel
+from viz.training_viz import plot_nmf, reconstruction_error_boxplot
 
 ModuleType = Union[str, Callable[..., nn.Module]]
 
@@ -339,7 +344,7 @@ class ResNetDiffusion(nn.Module):
         return self.resnet(x, emb)
 
 
-class DDPM:
+class DDPM(BaseModel):
     def __init__(
         self,
         seed=0,
@@ -476,7 +481,9 @@ class DDPM:
         with torch.no_grad():
             b = x.shape[0]
             xs = []
-            x_noisy, _ = self.forward_noise(x, torch.full((b,), t, device=self.device).long())
+            x_noisy, _ = self.forward_noise(
+                x, torch.full((b,), t, device=self.device).long()
+            )
             x_noisy = x
             for i in reversed(range(0, t)):
                 x_noisy = self.sample(
@@ -592,9 +599,12 @@ class DDPM:
                 pred = total
 
             preds.append(pred)
-
-        preds = np.concatenate(preds, axis=0)
-
+        # If preds contains multiple batches, concatenate them
+        if len(preds) > 1:
+            preds = np.concatenate(preds, axis=0)
+        else:
+            preds = np.array(preds)
+        preds = preds.reshape(-1, 1)
         return preds
 
     @torch.no_grad()
@@ -604,3 +614,149 @@ class DDPM:
             self.rec_t = reconstruction_t
             # predict the timestep based on x, or the probability of each class for the classification
         return self.reconstruct(x, self.rec_t)
+
+    def feature_wise_explanation(
+        self, X, y, saving_path, bath_size=32, n_components=2
+    ):
+
+        # For each data of the eval set, compute reconstruction error
+        X_anomaly = X[y == 1]
+        anomaly_eval_data_loader = DataLoader(
+            X_anomaly,
+            batch_size=bath_size,
+            shuffle=False,
+        )
+        X_normal = X[y == 0]
+        normal_eval_data_loader = DataLoader(
+            X_normal,
+            batch_size=bath_size,
+            shuffle=False,
+        )
+        anomaly_reconstruction_errors = []
+        for _, (X) in tqdm(enumerate(anomaly_eval_data_loader), desc="Anomaly"):
+            X = X.to(self.device)
+            reconstructed_x = self.raw_prediction(X)[-1]
+            reconstructed_x = reconstructed_x.to("cpu")
+            X = X.to("cpu")
+            # Compute reconstruction error
+            error = torch.abs(X - reconstructed_x)
+            anomaly_reconstruction_errors.append(error)
+        normal_reconstruction_errors = []
+        for _, (X) in tqdm(enumerate(normal_eval_data_loader), desc="Normal"):
+            X = X.to(self.device)
+            reconstructed_x = self.raw_prediction(X)[-1]
+            reconstructed_x = reconstructed_x.to("cpu")
+            X = X.to("cpu")
+            # Compute reconstruction error
+            error = torch.abs(X - reconstructed_x)
+            normal_reconstruction_errors.append(error)
+
+        anomaly_reconstruction_errors = torch.concat(
+            anomaly_reconstruction_errors, dim=0
+        )
+
+        normal_reconstruction_errors = torch.concat(
+            normal_reconstruction_errors, dim=0
+        )
+        w, h = self.non_negative_matrix_factorization(
+            anomaly_reconstruction_errors, n_components=n_components
+        )
+
+        return anomaly_reconstruction_errors, normal_reconstruction_errors, w, h
+
+    @staticmethod
+    def non_negative_matrix_factorization(v, n_components=2):
+        nmf = NMF(
+            n_components=n_components,
+            init="random",
+            random_state=0,
+            max_iter=10000,
+        )
+        w = nmf.fit_transform(v)
+        h = nmf.components_
+        return w, h
+
+    def instance_explanation(
+        self,
+        x,
+        expected_explanation,
+        saving_path,
+        exp_name,
+        plot=True,
+        **kwargs,
+    ):
+        if len(x.shape) == 1:
+            x = x.reshape(1, -1)
+        x = torch.from_numpy(x).float().to(self.device)
+        reconstructed_x = self.raw_prediction(x)[-1]
+        reconstructed_x = reconstructed_x.to("cpu")
+        x = x.to("cpu")
+        error = torch.abs(x - reconstructed_x)
+        if plot:
+            for i in range(x.shape[0]):
+                plt.figure()
+
+                scores = np.abs(error[i].numpy())
+                scores = scores / np.sum(scores)
+                plt.bar(
+                    np.arange(x.shape[1]),
+                    scores,
+                    label="Reconstruction error",
+                )
+                plt.bar(
+                    np.arange(x.shape[1]),
+                    expected_explanation[i],
+                    alpha=0.4,
+                    label="Expected explanation",
+                )
+                plt.xlabel("Feature")
+                plt.ylabel("Reconstruction error")
+                plt.legend()
+                plt.title(f"Reconstruction error for instance {i}, {exp_name}")
+                plt.savefig(
+                    Path(
+                        saving_path,
+                        f"{exp_name}_instance_{i}_reconstruction_error.png",
+                    )
+                )
+                plt.close()
+        return error
+
+    def global_explanation(
+        self, X, y_pred, experiment_name, saving_path, plot=True, **kwargs
+    ):
+        ncomponents = kwargs.get("n_components", 2)
+        anomaly_reconstruction_error, normal_reconstruction_error, w, h = (
+            self.feature_wise_explanation(
+                X=X,
+                y=y_pred,
+                saving_path=saving_path,
+                n_components=ncomponents,
+            )
+        )
+        if plot:
+            reconstruction_error_boxplot(
+                anomaly_reconstruction_error,
+                exp_name=experiment_name,
+                saving_path=saving_path,
+            )
+            plot_nmf(w, h, exp_name=experiment_name, saving_path=saving_path)
+        np.save(
+            Path(saving_path, "anomaly_reconstruction_error.npy"),
+            anomaly_reconstruction_error,
+        )
+        np.save(
+            Path(saving_path, "normal_reconstruction_error.npy"),
+            normal_reconstruction_error,
+        )
+        np.save(Path(saving_path, "NMF_w.npy"), w)
+        np.save(Path(saving_path, "NMF_h.npy"), h)
+
+        return anomaly_reconstruction_error, normal_reconstruction_error, w, h
+
+    def save_model(self, path):
+        torch.save(self.model.state_dict(), path)
+
+    def load_model(self, path):
+        self.model.load_state_dict(torch.load(path))
+        return self

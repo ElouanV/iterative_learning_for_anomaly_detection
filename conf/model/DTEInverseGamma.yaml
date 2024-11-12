@@ -4,3 +4,9 @@ training:
   epochs: 5
   batch_size: 64
   learning_rate: 1e-4
+
+model_parameters:
+  hidden_size: [256, 512, 256]
+  epochs: 400
+  batch_size: 64
+  learning_rate: 1e-4

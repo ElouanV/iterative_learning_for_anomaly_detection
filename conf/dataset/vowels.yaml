@@ -1,0 +1,4 @@
+data_path: data_adbench/40_vowels.npz
+data_type: tabular
+dataset_name: 40_vowels
+test_ratio: 0.2

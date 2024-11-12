@@ -1,0 +1,4 @@
+data_path: data_adbench/45_wine.npz
+data_type: tabular
+dataset_name: 45_wine
+test_ratio: 0.2

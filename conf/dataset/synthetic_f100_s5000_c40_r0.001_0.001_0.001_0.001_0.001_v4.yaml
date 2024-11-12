@@ -1,0 +1,4 @@
+data_type: tabular
+dataset_name: synthetic_f100_s5000_c40_r0.001_0.001_0.001_0.001_0.001_v4
+dataset_path: dataset/synthetic_generation/synthetic_f100_s5000_c40_r0.001_0.001_0.001_0.001_0.001_v4
+test_ratio: 0.2

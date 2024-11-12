@@ -1,0 +1,4 @@
+data_path: data_adbench/56_yelp.npz
+data_type: NLP
+dataset_name: 56_yelp
+test_ratio: 0.2

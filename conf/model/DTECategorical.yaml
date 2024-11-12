@@ -4,6 +4,6 @@ model_parameters:
   hidden_size: [256,512,256]
 
 training:
-  epochs: 5
+  epochs: 400
   batch_size: 64
   learning_rate: 1e-4

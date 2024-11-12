@@ -1,0 +1,4 @@
+data_path: data_adbench/52_SVHN.npz
+data_type: image
+dataset_name: 52_SVHN
+test_ratio: 0.2

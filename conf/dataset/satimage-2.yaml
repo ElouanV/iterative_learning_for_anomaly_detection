@@ -1,0 +1,4 @@
+data_path: data_adbench/31_satimage-2.npz
+data_type: tabular
+dataset_name: 31_satimage-2
+test_ratio: 0.2

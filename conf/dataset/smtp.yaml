@@ -1,0 +1,4 @@
+data_path: data_adbench/34_smtp.npz
+data_type: tabular
+dataset_name: 34_smtp
+test_ratio: 0.2

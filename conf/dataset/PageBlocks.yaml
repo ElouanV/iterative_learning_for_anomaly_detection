@@ -1,0 +1,4 @@
+data_path: data_adbench/27_PageBlocks.npz
+data_type: tabular
+dataset_name: 27_PageBlocks
+test_ratio: 0.2

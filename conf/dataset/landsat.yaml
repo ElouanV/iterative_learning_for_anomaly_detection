@@ -1,0 +1,4 @@
+data_path: data_adbench/19_landsat.npz
+data_type: tabular
+dataset_name: 19_landsat
+test_ratio: 0.2

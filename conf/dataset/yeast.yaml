@@ -1,0 +1,4 @@
+data_path: data_adbench/47_yeast.npz
+data_type: tabular
+dataset_name: 47_yeast
+test_ratio: 0.2

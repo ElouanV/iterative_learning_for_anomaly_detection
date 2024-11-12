@@ -1,0 +1,4 @@
+data_path: data_adbench/41_Waveform.npz
+data_type: tabular
+dataset_name: 41_Waveform
+test_ratio: 0.2

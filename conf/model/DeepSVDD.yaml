@@ -1,0 +1,36 @@
+model_name: "DeepSVDD"
+
+model_parameters:
+  42_WBC:
+    nu: 0.1
+    net_name: tabular
+    input_dim: 0
+    hidden_layers: [32, 16]
+  30_satellite:
+    nu: 0.1
+    net_name: tabular
+    input_dim: 0
+    hidden_layers: [32, 16, 8]
+  31_satimage-2:
+    nu: 0.1
+    net_name: tabular
+    input_dim: 0
+    hidden_layers: [32, 16, 8]
+  6_cardio:
+    nu: 0.1
+    net_name: tabular
+    input_dim: 0
+    hidden_layers: [32, 16, 8]
+  2_annthyroid:
+    nu: 0.1
+    net_name: tabular
+    input_dim: 0
+    hidden_layers: [32, 16, 4]
+  
+  
+  
+  
+training:
+  learning_rate: 0.001
+  epochs: 50
+  batch_size: 128

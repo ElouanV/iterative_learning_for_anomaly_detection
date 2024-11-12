@@ -1,0 +1,4 @@
+data_path: data_adbench/3_backdoor.npz
+data_type: tabular
+dataset_name: 3_backdoor
+test_ratio: 0.2

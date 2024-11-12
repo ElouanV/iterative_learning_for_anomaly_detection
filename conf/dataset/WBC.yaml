@@ -1,0 +1,4 @@
+data_path: data_adbench/42_WBC.npz
+data_type: tabular
+dataset_name: 42_WBC
+test_ratio: 0.2

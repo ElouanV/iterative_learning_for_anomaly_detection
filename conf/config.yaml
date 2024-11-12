@@ -1,15 +1,30 @@
-random_seed: 42
+random_seed: 0
 save_fig: True
 output_path: 'results'
+device: 'auto'
+mode: 'debug' # 'benchmark' or 'debug'
+
+
+realistic_synthetic_mode: null
+alpha: 5
+percentage: 0.1
+run_id: "epxlainability_benchamrk"
+
 
 defaults:
   - _self_
-  - dataset: 'annthyroid'
-  - model: 'DDPM'
+  - dataset: synthetic_f4_s5000_c2_r0.05_0.05_v0.yaml
+  - model: 'DTECategorical'
   - training_method: 'iterative_dataset_sampling'
+  - override hydra/launcher: 'joblib'
+
 
 hydra:
+  launcher:
+     n_jobs: 4
   sweeper: 
     params:
-      model: DTECategorical, DTEInverseGamma, DDPM
-      dataset: annthyroid, census
+      dataset: synthetic_f4_s5000_c2_r0.05_0.05_v0.yaml, synthetic_f4_s5000_c2_r0.05_0.05_v1.yaml, synthetic_f4_s5000_c2_r0.05_0.05_v2.yaml, synthetic_f4_s5000_c2_r0.05_0.05_v3.yaml, synthetic_f4_s5000_c2_r0.05_0.05_v4.yaml
+      # glob(*) allows to select all datasets
+      training_method: unsupervised, iterative_dataset_sampling
+      # random_seed: 0,1,2,3

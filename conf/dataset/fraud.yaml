@@ -1,0 +1,4 @@
+data_path: data_adbench/13_fraud.npz
+data_type: tabular
+dataset_name: 13_fraud
+test_ratio: 0.2

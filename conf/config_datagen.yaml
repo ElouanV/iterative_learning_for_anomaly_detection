@@ -1,0 +1,29 @@
+random_seed: 0
+save_fig: True
+output_path: 'dataset'
+device: 'auto'
+mode: 'benchmark' # 'benchmark' or 'debug'
+
+
+realistic_synthetic_mode: null
+alpha: 5
+percentage: 0.1
+run_id: "datagen"
+
+
+defaults:
+  - _self_
+  - dataset: 'synthetic_generation' 
+  - model: 'DTECategorical'
+  - training_method: 'iterative_dataset_sampling'
+  # - override hydra/launcher: 'joblib'
+
+
+hydra:
+  # launcher:
+  #   n_jobs: 4
+  sweeper: 
+    params:
+      # glob(*) allows to select all datasets
+      training_method: unsupervised, iterative_dataset_sampling
+      # random_seed: 0,1,2,3

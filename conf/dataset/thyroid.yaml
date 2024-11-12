@@ -1,0 +1,4 @@
+data_path: data_adbench/38_thyroid.npz
+data_type: tabular
+dataset_name: 38_thyroid
+test_ratio: 0.2
