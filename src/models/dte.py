@@ -1,6 +1,7 @@
 # This code is from https://github.com/vicliv/DTE by (V. Livernoche, V. Jain, Y. Hezaveh, S. Ravanbakhsh)
 
 
+import logging
 from pathlib import Path
 
 import numpy as np
@@ -138,6 +139,7 @@ class DTE:
 
         self.forward_noise = forward_noise
         self.model = None
+        self.logger = logging.getLogger(model_name)
 
     def compute_loss(self, x, t):
         pass
@@ -252,34 +254,44 @@ class DTE:
 
             err.append(err_i)
 
-        couple_err = np.zeros((X.shape[-1], X.shape[-1]))
-        for i in tqdm(range(X.shape[-1]), desc="Couple of features"):
-            for j in range(X.shape[-1]):
-                err_t = []
-                for t in range(0, self.T, step):
-                    X_noisy = np.copy(X)
-                    cols = X[:, [i, j]].T
-                    cols = (
-                        self.forward_noise(
-                            torch.tensor(cols),
-                            torch.tensor([t, t], dtype=torch.long),
-                        )
-                        .detach()
-                        .cpu()
-                        .numpy()
-                    )
-                    if j != i:
-                        X_noisy[:, i], X_noisy[:, j] = cols[0], cols[1]
-                    else:
-                        X_noisy[:, i] = cols[0]
-                    t_pred = self.predict_score(X_noisy)
-                    err_t.append(np.mean(t_pred - t0))
+        # couple_err = np.zeros((X.shape[-1], X.shape[-1]))
+        # for i in tqdm(range(X.shape[-1]), desc="Couple of features"):
+        #     for j in range(X.shape[-1]):
+        #         err_t = []
+        #         for t in range(0, self.T, step):
+        #             X_noisy = np.copy(X)
+        #             cols = X[:, [i, j]].T
+        #             cols = (
+        #                 self.forward_noise(
+        #                     torch.tensor(cols),
+        #                     torch.tensor([t, t], dtype=torch.long),
+        #                 )
+        #                 .detach()
+        #                 .cpu()
+        #                 .numpy()
+        #             )
+        #             if j != i:
+        #                 X_noisy[:, i], X_noisy[:, j] = cols[0], cols[1]
+        #             else:
+        #                 X_noisy[:, i] = cols[0]
+        #             t_pred = self.predict_score(X_noisy)
+        #             err_t.append(np.mean(t_pred - t0))
 
-                couple_err[i, j] = np.mean(err_t)
-        assert len(err) == X.shape[-1]
-        assert couple_err.shape == (X.shape[-1], X.shape[-1])
-        return err, couple_err
+        #         couple_err[i, j] = np.mean(err_t)
+        # assert len(err) == X.shape[-1]
+        # assert couple_err.shape == (X.shape[-1], X.shape[-1])
+        return err  # , couple_err
 
+    def save_model(self, path):
+        self.logger.info(f"Saving model to {path}")
+        torch.save(self.model.state_dict(), path)
+
+    def load_model(self, path, X):
+        self.model = MLP(
+                [X.shape[-1]] + self.hidden_size, num_bins=self.num_bins
+            ).to(self.device)
+        self.model.load_state_dict(torch.load(path))
+        
 
 class DTECategorical(DTE):
     def __init__(
@@ -337,7 +349,7 @@ class DTECategorical(DTE):
 
         nb_samples, nb_features = x.shape
         err = np.zeros((nb_samples, nb_features))
-        # TODO
+
         t0 = self.predict_score(x)
         # variables individuelles
         for i in tqdm(range(x.shape[-1]), desc="Single features"):
@@ -370,6 +382,44 @@ class DTECategorical(DTE):
             )
         return np.array(err).squeeze()
 
+    def gradient_explanation(self, x, expected_explanation, saving_path, exp_name, plot=False):
+        """
+        Compute the gradient of the model with respect to the input to compute feature importance vector for each sample
+        """
+        if len(x.shape) == 1:
+            x = x.reshape(1, -1)
+
+        nb_samples = x.shape[0]
+
+        feature_importance = []
+        data_loader = DataLoader(
+            torch.from_numpy(x).float(),
+            batch_size=100,
+            shuffle=False,
+            drop_last=False,
+        )
+        for i, x in tqdm(enumerate(data_loader), desc='Gradient explanation'):
+            x = x.to(self.device)
+            x.requires_grad = True
+            self.model.zero_grad()
+            t_pred = self.model(x)
+            t_pred.backward(torch.ones_like(t_pred))
+            gradient_batch = x.grad.cpu().detach().numpy()
+            feature_importance.append(gradient_batch)
+        feature_importance = np.concatenate(feature_importance, axis=0)
+        if plot:
+            for i in range(nb_samples):
+                plot_feature_importance(
+                    feature_importance[i],
+                    expected_explanation=expected_explanation[i],
+                    exp_name=exp_name,
+                    saving_path=saving_path,
+                )
+        # Normalize the gradient
+        feature_importance = torch.from_numpy(feature_importance)
+        feature_importance = torch.nn.functional.softmax(feature_importance, dim=1)
+        return feature_importance.squeeze()
+
     def global_explanation(
         self,
         X,
@@ -381,22 +431,22 @@ class DTECategorical(DTE):
         **kwargs
     ):
         X = X[y_pred == 1]
-        feature_score, couple_feature_score = self.explain(X, step=step)
+        feature_score = self.explain(X, step=step)
         if plot:
             plot_feature_importance(
                 feature_score, exp_name=experiment_name, saving_path=saving_path
             )
-            plot_couple_feature_importance_matrix(
-                couple_feature_score,
-                exp_name=experiment_name,
-                saving_path=saving_path,
-            )
+            # plot_couple_feature_importance_matrix(
+            #     couple_feature_score,
+            #     exp_name=experiment_name,
+            #     saving_path=saving_path,
+            # )
 
         np.save(Path(saving_path, "feature_score.npy"), feature_score)
-        np.save(
-            Path(saving_path, "couple_feature_score.npy"), couple_feature_score
-        )
-        return feature_score, couple_feature_score
+        # np.save(
+        #     Path(saving_path, "couple_feature_score.npy"), couple_feature_score
+        # )
+        return feature_score  # couple_feature_score
 
 
 class DTEInverseGamma(DTE):

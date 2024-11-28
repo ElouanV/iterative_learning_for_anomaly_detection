@@ -1,4 +1,4 @@
-model_name: 'DTECategorical'
+model_name: 'DTEC'
 model_parameters:
   num_bins: 7
   hidden_size: [256,512,256]

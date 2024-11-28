@@ -24,7 +24,7 @@ def train_model(
         model, train_losses = model.fit(
             X_train, y_train, model_config=cfg.model, device=device
         )
-    elif cfg.training_method.name == "dataset_sampling":
+    elif cfg.training_method.name == "DSIL":
         iterative_learning = SamplingIterativeLearning(
             cfg, saving_path=saving_path
         )

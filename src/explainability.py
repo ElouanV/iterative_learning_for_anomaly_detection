@@ -15,7 +15,7 @@ from training_method.iterative_learning import SamplingIterativeLearning
 from training_method.weighted_loss_iterative_learning import \
     WeightedLossIterativeLearning
 from utils import (check_cuda, get_dataset, low_density_anomalies, nDCG,
-                   select_model, setup_experiment)
+                   select_model, setup_experiment, explanation_accuracy)
 from viz.training_viz import (plot_anomaly_score_distribution,
                               plot_anomaly_score_distribution_split, plot_tsne)
 
@@ -37,7 +37,7 @@ def train_model(
         model, train_losses = model.fit(
             X_train, y_train, model_config=cfg.model
         )
-    elif cfg.training_method.name == "dataset_sampling":
+    elif cfg.training_method.name == "DSIL":
         iterative_learning = SamplingIterativeLearning(
             cfg, saving_path=saving_path, exp_name=exp_name,
         )
@@ -207,10 +207,36 @@ def run_config(cfg, logger, device):
         expected_explanation=expected_explanation,
         saving_path=saving_path,
         experiment_name=experiment_name,
-    )
-    shap_ndcg = nDCG(shap_feature_importance, expected_explanation)
+    ).squeeze()
     shap_end_time = time.time()
+    shap_ndcg = nDCG(shap_feature_importance, expected_explanation)
 
+    # Grad explainer 
+    start_grad_time = time.time()
+    grad_feature_importance = model.gradient_explanation(
+        samples,
+        expected_explanation=expected_explanation,
+        saving_path=saving_path,
+        exp_name=experiment_name,
+    )
+    end_global_explanation = time.time()
+    grad_ndcg = nDCG(grad_feature_importance, expected_explanation)
+
+    # Compute explanation accuracy for all methods
+    grad_explanation_accuracy = explanation_accuracy(explanation=grad_feature_importance,
+                                                    ground_truth=expected_explanation)
+    shap_explanation_accuracy = explanation_accuracy(explanation=shap_feature_importance,
+                                                    ground_truth=expected_explanation)
+    feature_importance_accuracy = explanation_accuracy(explanation=feature_importance,
+                                                       ground_truth=expected_explanation)
+
+    metric_df["grad_explanation_accuracy"] = grad_explanation_accuracy
+    metric_df["shap_explanation_accuracy"] = shap_explanation_accuracy
+    metric_df["feature_importance_accuracy"] = feature_importance_accuracy
+    metric_df["grad_feature_importance_ndcg"] = grad_ndcg.mean()
+    metric_df["grad_explanation_time"] = end_global_explanation - start_grad_time
+
+    logger.info(f"Grad feature importance NDCG: {grad_ndcg.mean()}")
     logger.info(f"Feature importance NDCG: {ndcg.mean()}")
     logger.info(f"Shap feature importance NDCG: {shap_ndcg.mean()}")
 
@@ -220,6 +246,7 @@ def run_config(cfg, logger, device):
     metric_df["local_explanation_time"] = local_explanation_end_time - local_explanation_start_time
     metric_df["shap_explanation_time"] = shap_end_time - shap_start_time
 
+    train_log = pd.DataFrame(train_log)
     if cfg.mode != "debug":
         metric_df.to_csv(
             Path(
@@ -227,14 +254,13 @@ def run_config(cfg, logger, device):
                 "model_metrics.csv",
             )
         )
-    train_log = pd.DataFrame(train_log)
-    if cfg.mode != "debug":
         train_log.to_csv(
             Path(
                 saving_path,
                 "train_log.csv",
             )
         )
+        model.save_model(Path(saving_path, "model.pth"))
     # Dump used configuration
     omegaconf.OmegaConf.save(cfg, Path(saving_path, "experiment_config.yaml"))
     logger.info(f'Everything saved in {saving_path}')
@@ -249,7 +275,7 @@ def main(cfg: omegaconf.DictConfig):
             f"Data type {cfg.dataset.data_type} not implemented yet"
         )
     if cfg.mode == "benchmark":
-        if cfg.training_method.name == "dataset_sampling":
+        if cfg.training_method.name == "DSIL":
             for ratio in [0.5, "cosine", "exponential"]:
                 cfg.training_method.ratio = ratio
                 for sampling_method in ["deterministic"]:
@@ -259,7 +285,7 @@ def main(cfg: omegaconf.DictConfig):
             run_config(cfg, logger, device)
     elif cfg.mode == "debug":
         cfg.model.training.epochs = 3
-        if cfg.training_method.name == "dataset_sampling":
+        if cfg.training_method.name == "DSIL":
             cfg.training_method.max_iter = 2
         run_config(cfg, logger, device)
 

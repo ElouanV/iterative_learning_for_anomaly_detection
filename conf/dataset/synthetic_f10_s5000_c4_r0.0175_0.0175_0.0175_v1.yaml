@@ -1,4 +1,0 @@
-data_type: tabular
-dataset_name: synthetic_f10_s5000_c4_r0.0175_0.0175_0.0175_v1
-dataset_path: dataset/synthetic_generation/synthetic_f10_s5000_c4_r0.0175_0.0175_0.0175_v1/data.npy
-test_ratio: 0.2

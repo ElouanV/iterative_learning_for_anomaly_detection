@@ -10,3 +10,5 @@ outputs/
 results/
 multirun/
 *.npy
+data_adbench
+dataset

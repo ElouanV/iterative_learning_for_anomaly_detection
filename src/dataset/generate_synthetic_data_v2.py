@@ -195,7 +195,7 @@ def add_anomalies(X, graphical_model, anomalies: list, ratio_anomalies: list):
 
 
 def generate_graphical_model(
-    n_features: int, number_of_causalities: int, distributions: list
+    n_features: int, number_of_causalities: int, distributions: list, saving_path: str
 ):
     feature_distributions = random.choices(distributions, k=n_features)
     graphical_model = generate_random_dag_with_edges(
@@ -232,7 +232,7 @@ def generate_graphical_model(
         graphical_model.nodes[i]["fn"] = fn
         graphical_model.nodes[i]["distrib_params"] = distrib_params
     # Save the feature generation info in a yaml file
-    with open("test/feature_generation_info.yaml", "w") as file:
+    with open(os.path.join(saving_path, "feature_generation_info.yaml"), "w") as file:
         yaml.dump(feature_generation_info, file)
     return graphical_model
 
@@ -250,11 +250,10 @@ def generate_synthetic_data(
     """ """
     os.makedirs(saving_path, exist_ok=True)
     graphical_model = generate_graphical_model(
-        n_features, n_causalities, distributions=distributions
+        n_features, n_causalities, distributions=distributions, saving_path=saving_path
     )
     X = run_graphical_model(graphical_model, n_samples)
     plot_graph(graphical_model, saving_path="test")
-    ratio_aomalies = [0.07] * len(anomalies)
     X, y, explanation, anomaly_information = add_anomalies(
         X, graphical_model, anomalies=anomalies, ratio_anomalies=ratio_aomalies
     )
@@ -263,7 +262,7 @@ def generate_synthetic_data(
         "y": np.array(y),
         "explanation": np.array(explanation),
     }
-    with open("test/anomaly_information.yaml", "w") as file:
+    with open(os.path.join(saving_path, "anomaly_information.yaml"), "w") as file:
         yaml.dump(anomaly_information, file)
     pickle.dump(data, open(os.path.join(saving_path, "data.npy"), "wb"))
     np.save(os.path.join(saving_path, "features.npy"), np.array(X))

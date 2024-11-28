@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 
 import numpy as np
+import torch
 
 from dataset.data_generator import DataGenerator
 from models.ddpm import DDPM
@@ -10,7 +11,7 @@ from models.dte import DTECategorical, DTEInverseGamma
 
 
 def select_model(model_config: dict, device):
-    if model_config.model_name == "DTECategorical":
+    if model_config.model_name == "DTEC":
         return DTECategorical(
             hidden_size=model_config.model_parameters.hidden_size,
             epochs=model_config.training.epochs,
@@ -209,3 +210,88 @@ def nDCG(importance_scores, relevance_matrix):
     ndcg_scores = np.where(idcg_scores == 0, 0, dcg_scores / idcg_scores)
 
     return ndcg_scores
+
+
+def dataframe_to_latex(
+    df, 
+    column_format=None, 
+    caption=None, 
+    label=None, 
+    header=True, 
+    index=False, 
+    float_format="%.2f"
+):
+    """
+    Convert a pandas DataFrame to a clean LaTeX table.
+
+    Parameters:
+        df (pd.DataFrame): The DataFrame to convert.
+        column_format (str): Column alignment (e.g., 'lcr' for left, center, right).
+                            Defaults to auto-detection based on the number of columns.
+        caption (str): Caption for the table.
+        label (str): Label for referencing the table in LaTeX.
+        header (bool): Whether to include column headers.
+        index (bool): Whether to include the DataFrame index.
+        float_format (str): Format for floating-point numbers (default: "%.2f").
+
+    Returns:
+        str: The LaTeX table as a string.
+    """
+    # Default column format if not specified
+    if column_format is None:
+        column_format = "l" * (len(df.columns) + (1 if index else 0))
+
+    # Convert the DataFrame to LaTeX
+    latex_str = df.to_latex(
+        index=index,
+        column_format=column_format,
+        header=header,
+        float_format=float_format,
+        escape=False,  # Allows LaTeX-specific characters (e.g., \%)
+    )
+    
+    # Add optional caption and label
+    if caption or label:
+        latex_table = "\\begin{table}[ht]\n\\centering\n"
+        if caption:
+            latex_table += f"\\caption{{{caption}}}\n"
+        if label:
+            latex_table += f"\\label{{{label}}}\n"
+        latex_table += latex_str
+        latex_table += "\\end{table}"
+    else:
+        latex_table = latex_str
+    
+    return latex_table
+
+
+def explanation_accuracy(ground_truth, explanation, k='auto'):
+    """
+    Compute the accuracy of an explanation compared to the ground truth.
+
+    Parameters:
+        ground_truth (np.ndarray): The ground truth explanation.
+        explanation (np.ndarray): The explanation to evaluate.
+
+    Returns:
+        float: The accuracy of the explanation.
+    """
+    if explanation.shape != ground_truth.shape:
+        raise ValueError("The explanation and ground truth must have the same shape.")
+    if type(explanation) is torch.Tensor:
+        explanation = explanation.cpu().detach().numpy()
+    accuracy = []
+    for row in range(ground_truth.shape[0]):
+        if k == 'auto':
+            k_ = int(np.sum(ground_truth[row]))
+        else:
+            k_ = k
+        # Sort the explanation by importance
+        sorted_indices = np.argsort(explanation[row])[::-1]
+        instance_explanation = np.zeros_like(explanation[row])
+        instance_explanation[sorted_indices[:k_]] = 1
+
+        # Compute the accuracy: intersection of topk method and ground truth divided by k
+        instance_accuracy = np.sum(ground_truth[row] * instance_explanation) / k_
+        accuracy.append(instance_accuracy)
+    return np.mean(accuracy)

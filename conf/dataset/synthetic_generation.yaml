@@ -1,6 +1,6 @@
 n_samples: 5000
-n_features: 50
-n_causalities: 12
+n_features: 4
+n_causalities: 2
 distributions:
   - normal
   - uniform
@@ -9,14 +9,8 @@ distributions:
 anomalies:
   - global
   - cluster
-  - local
-  - additive_noise
-  - multiplicative_noise
 
 ratio_anomalies:
-  - 0.02
-  - 0.02
-  - 0.02
-  - 0.02
-  - 0.02
+  - 0.05
+  - 0.05
 saving_path: 'dataset/synthetic_generation'

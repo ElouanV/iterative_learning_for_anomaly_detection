@@ -1,0 +1,4 @@
+data_type: tabular
+dataset_name: synthetic_f1000_s5000_c40_r0.02_0.02_0.02_0.02_0.02_v2
+dataset_path: dataset/synthetic_generation/synthetic_f1000_s5000_c40_r0.02_0.02_0.02_0.02_0.02_v2/data.npy
+test_ratio: 0.2

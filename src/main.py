@@ -56,11 +56,11 @@ def run_config(cfg, logger, device):
     training_time = end_time - start_time
 
     start_time = time.time()
-    score = model.predict_score(data["X_test"], device=device)
+    score = model.predict_score(data["X_test"], device=device).squeeze()
     end_time = time.time()
     inference_time = end_time - start_time
 
-    plot_score_density(score, saving_path)
+    plot_score_density(score, exp_name=experiment_name, saving_path=saving_path)
     data["y_test"][data["y_test"] > 0] = 1
 
     indices = np.arange(len(data["y_test"]))
@@ -115,7 +115,7 @@ def main(cfg: omegaconf.DictConfig):
             f"Data type {cfg.dataset.data_type} not implemented yet"
         )
     if cfg.mode == "benchmark":
-        if cfg.training_method.name == "dataset_sampling":
+        if cfg.training_method.name == "DSIL":
             for ratio in [0.5, "cosine", "exponential"]:
                 cfg.training_method.ratio = ratio
                 for sampling_method in ["deterministic", "probabilistic"]:
@@ -125,7 +125,7 @@ def main(cfg: omegaconf.DictConfig):
             run_config(cfg, logger, device)
     elif cfg.mode == "debug":
         cfg.model.training.epochs = 3
-        if cfg.training_method.name == "dataset_sampling":
+        if cfg.training_method.name == "DSIL":
             cfg.training_method.max_iter = 2
         run_config(cfg, logger, device)
 
