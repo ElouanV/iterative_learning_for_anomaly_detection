@@ -12,8 +12,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from models.losses import WMSELoss
-from viz.training_viz import (plot_couple_feature_importance_matrix,
-                              plot_feature_importance)
+from viz.training_viz import plot_feature_importance
 
 
 class MLP(nn.Module):
@@ -218,12 +217,11 @@ class DTE:
         preds = np.concatenate(preds, axis=0)
 
         if self.num_bins > 1:
-            # preds = np.argmax(preds, axis=1)
-
-            # compute mean prediction over all bins
             preds = np.matmul(preds, np.arange(0, preds.shape[-1]))
         else:
             preds = preds.squeeze()
+        if give_preds_binned:
+            return preds, binning(preds, T=self.T, num_bins=self.num_bins)
         return preds
 
     def explain(self, X, y=None, device="cuda", saving_path=None, step=10):
@@ -246,52 +244,15 @@ class DTE:
                 )
                 t_pred = self.predict_score(X_noisy)
                 err_i.append(np.abs(t_pred - t0))
-
-            # Compute the mean error for each sample
             err_i = np.array(err_i)
 
             err_i = np.mean(err_i)
 
             err.append(err_i)
+        return err
 
-        # couple_err = np.zeros((X.shape[-1], X.shape[-1]))
-        # for i in tqdm(range(X.shape[-1]), desc="Couple of features"):
-        #     for j in range(X.shape[-1]):
-        #         err_t = []
-        #         for t in range(0, self.T, step):
-        #             X_noisy = np.copy(X)
-        #             cols = X[:, [i, j]].T
-        #             cols = (
-        #                 self.forward_noise(
-        #                     torch.tensor(cols),
-        #                     torch.tensor([t, t], dtype=torch.long),
-        #                 )
-        #                 .detach()
-        #                 .cpu()
-        #                 .numpy()
-        #             )
-        #             if j != i:
-        #                 X_noisy[:, i], X_noisy[:, j] = cols[0], cols[1]
-        #             else:
-        #                 X_noisy[:, i] = cols[0]
-        #             t_pred = self.predict_score(X_noisy)
-        #             err_t.append(np.mean(t_pred - t0))
 
-        #         couple_err[i, j] = np.mean(err_t)
-        # assert len(err) == X.shape[-1]
-        # assert couple_err.shape == (X.shape[-1], X.shape[-1])
-        return err  # , couple_err
 
-    def save_model(self, path):
-        self.logger.info(f"Saving model to {path}")
-        torch.save(self.model.state_dict(), path)
-
-    def load_model(self, path, X):
-        self.model = MLP(
-                [X.shape[-1]] + self.hidden_size, num_bins=self.num_bins
-            ).to(self.device)
-        self.model.load_state_dict(torch.load(path))
-        
 
 class DTECategorical(DTE):
     def __init__(
@@ -382,7 +343,9 @@ class DTECategorical(DTE):
             )
         return np.array(err).squeeze()
 
-    def gradient_explanation(self, x, expected_explanation, saving_path, exp_name, plot=False):
+    def gradient_explanation(
+        self, x, expected_explanation, saving_path, exp_name, plot=False
+    ):
         """
         Compute the gradient of the model with respect to the input to compute feature importance vector for each sample
         """
@@ -398,12 +361,12 @@ class DTECategorical(DTE):
             shuffle=False,
             drop_last=False,
         )
-        for i, x in tqdm(enumerate(data_loader), desc='Gradient explanation'):
+        for i, x in tqdm(enumerate(data_loader), desc="Gradient explanation"):
             x = x.to(self.device)
             x.requires_grad = True
             self.model.zero_grad()
             t_pred = self.model(x)
-            t_pred.backward(torch.ones_like(t_pred))
+            t_pred.backward(t_pred)
             gradient_batch = x.grad.cpu().detach().numpy()
             feature_importance.append(gradient_batch)
         feature_importance = np.concatenate(feature_importance, axis=0)
@@ -417,7 +380,9 @@ class DTECategorical(DTE):
                 )
         # Normalize the gradient
         feature_importance = torch.from_numpy(feature_importance)
-        feature_importance = torch.nn.functional.softmax(feature_importance, dim=1)
+        feature_importance = torch.nn.functional.softmax(
+            feature_importance, dim=1
+        )
         return feature_importance.squeeze()
 
     def global_explanation(
@@ -428,7 +393,7 @@ class DTECategorical(DTE):
         saving_path,
         plot=True,
         step=10,
-        **kwargs
+        **kwargs,
     ):
         X = X[y_pred == 1]
         feature_score = self.explain(X, step=step)
@@ -447,7 +412,16 @@ class DTECategorical(DTE):
         #     Path(saving_path, "couple_feature_score.npy"), couple_feature_score
         # )
         return feature_score  # couple_feature_score
+    
+    def save_model(self, path):
+        self.logger.info(f"Saving model to {path}")
+        torch.save(self.model.state_dict(), path)
 
+    def load_model(self, path, X):
+        self.model = MLP(
+            [X.shape[-1]] + self.hidden_size, num_bins=self.num_bins
+        ).to(self.device)
+        self.model.load_state_dict(torch.load(path))
 
 class DTEInverseGamma(DTE):
     def __init__(

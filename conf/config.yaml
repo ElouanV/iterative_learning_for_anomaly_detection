@@ -8,23 +8,21 @@ mode: 'benchmark' # 'benchmark' or 'debug'
 realistic_synthetic_mode: null
 alpha: 5
 percentage: 0.1
-run_id: "explainability_benchmark_corrected"
+run_id: "grid_search"
 
 
 defaults:
   - _self_
-  - dataset: synthetic_f4_s5000_c2_r0.05_0.05_v1
+  - dataset: synthetic_f1000_s5000_c40_r0.01_0.01_0.01_0.01_0.01_v0
   - model: 'DTECategorical'
   - training_method: 'unsupervised'
-  # - override hydra/launcher: 'joblib'
+  - override hydra/launcher: 'joblib'
 
 
 hydra:
-  # launcher:
-  #    n_jobs: 4
+  launcher:
+      n_jobs: 1
   sweeper: 
     params:
-      dataset: synthetic_f1000_s5000_c40_r0.02_0.02_0.02_0.02_0.02_v0, synthetic_f1000_s5000_c40_r0.02_0.02_0.02_0.02_0.02_v1, synthetic_f1000_s5000_c40_r0.02_0.02_0.02_0.02_0.02_v2, synthetic_f1000_s5000_c40_r0.02_0.02_0.02_0.02_0.02_v3, synthetic_f1000_s5000_c40_r0.02_0.02_0.02_0.02_0.02_v4
-      # glob(*) allows to select all datasets
-      training_method: unsupervised, iterative_dataset_sampling
-      # random_seed: 0,1,2,3
+      dataset: synthetic_f1000_s5000_c40_r0.01_0.01_0.01_0.01_0.01_v0
+      training_method: unsupervised

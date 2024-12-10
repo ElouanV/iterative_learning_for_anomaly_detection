@@ -18,6 +18,7 @@ def select_model(model_config: dict, device):
             batch_size=model_config.training.batch_size,
             lr=model_config.training.learning_rate,
             num_bins=model_config.model_parameters.num_bins,
+            T=model_config.model_parameters.T,
             device=device,
         )
     elif model_config.model_name == "DTEInverseGamma":
@@ -63,7 +64,7 @@ def count_ano(indices, y):
     return sum(y[indices])
 
 
-def pred_from_scores(scores, num_anomalies: NotImplemented):
+def pred_from_scores(scores, num_anomalies: int):
     """
     retourne une prédiction y où
     y[i] = 1 si scores[i] est l'un des num_anomalies plus grand score
@@ -130,10 +131,15 @@ def setup_experiment(cfg: dict):
         f"{cfg.model.model_name}_{cfg.training_method.name}_{cfg.training_method.sampling_method}"
         + (
             f"_{cfg.training_method.ratio}"
-            if cfg.training_method.name == "dataset_sampling"
+            if cfg.training_method.name == "DSIL"
             else ""
         )
         + f"_s{cfg.random_seed}"
+        + (
+            f"_T{cfg.model.model_parameters.T}_bins{cfg.model.model_parameters.num_bins}"
+            if cfg.model.model_name == "DTEC"
+            else ""
+        )
     )
     saving_path = Path(
         cfg.output_path,
@@ -177,49 +183,16 @@ def low_density_anomalies(test_log_probs, num_anomalies):
     return preds
 
 
-def dcg_score_matrix(importance_scores, relevance_matrix):
-    importance_scores = np.array(importance_scores)
-    relevance_matrix = np.array(relevance_matrix)
-    importance_scores = importance_scores.squeeze()
-    relevance_matrix = relevance_matrix.squeeze()
-    assert (
-        importance_scores.shape == relevance_matrix.shape
-    ), "importance_scores and relevance_matrix must have the same shape"
-
-    sorted_indices = np.argsort(importance_scores, axis=1)[:, ::-1]
-    sorted_relevance = np.take_along_axis(
-        relevance_matrix, sorted_indices, axis=1
-    )
-    ranks = np.arange(1, importance_scores.shape[1] + 1)
-    dcg_scores = np.sum(sorted_relevance / np.log2(ranks + 1), axis=1)
-
-    return dcg_scores
-
-
-def idcg_score_matrix(relevance_matrix):
-    relevance_matrix = np.array(relevance_matrix)
-    sorted_relevance = np.sort(relevance_matrix, axis=1)[:, ::-1]
-    ranks = np.arange(1, relevance_matrix.shape[1] + 1)
-    idcg_scores = np.sum(sorted_relevance / np.log2(ranks + 1), axis=1)
-    return idcg_scores
-
-
-def nDCG(importance_scores, relevance_matrix):
-    dcg_scores = dcg_score_matrix(importance_scores, relevance_matrix)
-    idcg_scores = idcg_score_matrix(relevance_matrix)
-    ndcg_scores = np.where(idcg_scores == 0, 0, dcg_scores / idcg_scores)
-
-    return ndcg_scores
 
 
 def dataframe_to_latex(
-    df, 
-    column_format=None, 
-    caption=None, 
-    label=None, 
-    header=True, 
-    index=False, 
-    float_format="%.2f"
+    df,
+    column_format=None,
+    caption=None,
+    label=None,
+    header=True,
+    index=False,
+    float_format="%.2f",
 ):
     """
     Convert a pandas DataFrame to a clean LaTeX table.
@@ -249,7 +222,7 @@ def dataframe_to_latex(
         float_format=float_format,
         escape=False,  # Allows LaTeX-specific characters (e.g., \%)
     )
-    
+
     # Add optional caption and label
     if caption or label:
         latex_table = "\\begin{table}[ht]\n\\centering\n"
@@ -261,37 +234,7 @@ def dataframe_to_latex(
         latex_table += "\\end{table}"
     else:
         latex_table = latex_str
-    
+
     return latex_table
 
 
-def explanation_accuracy(ground_truth, explanation, k='auto'):
-    """
-    Compute the accuracy of an explanation compared to the ground truth.
-
-    Parameters:
-        ground_truth (np.ndarray): The ground truth explanation.
-        explanation (np.ndarray): The explanation to evaluate.
-
-    Returns:
-        float: The accuracy of the explanation.
-    """
-    if explanation.shape != ground_truth.shape:
-        raise ValueError("The explanation and ground truth must have the same shape.")
-    if type(explanation) is torch.Tensor:
-        explanation = explanation.cpu().detach().numpy()
-    accuracy = []
-    for row in range(ground_truth.shape[0]):
-        if k == 'auto':
-            k_ = int(np.sum(ground_truth[row]))
-        else:
-            k_ = k
-        # Sort the explanation by importance
-        sorted_indices = np.argsort(explanation[row])[::-1]
-        instance_explanation = np.zeros_like(explanation[row])
-        instance_explanation[sorted_indices[:k_]] = 1
-
-        # Compute the accuracy: intersection of topk method and ground truth divided by k
-        instance_accuracy = np.sum(ground_truth[row] * instance_explanation) / k_
-        accuracy.append(instance_accuracy)
-    return np.mean(accuracy)

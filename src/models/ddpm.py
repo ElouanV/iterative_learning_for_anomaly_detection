@@ -22,8 +22,8 @@ from torch.optim import Adam
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from models.losses import WMSELoss
 from models.base_model import BaseModel
+from models.losses import WMSELoss
 from viz.training_viz import plot_nmf, reconstruction_error_boxplot
 
 ModuleType = Union[str, Callable[..., nn.Module]]

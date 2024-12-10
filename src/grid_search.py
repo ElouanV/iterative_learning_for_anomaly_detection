@@ -14,8 +14,8 @@ from shap_explainer import ShapExplainer
 from training_method.iterative_learning import SamplingIterativeLearning
 from training_method.weighted_loss_iterative_learning import \
     WeightedLossIterativeLearning
-from utils import (check_cuda, explanation_accuracy, get_dataset,
-                   low_density_anomalies, nDCG, select_model, setup_experiment)
+from utils import check_cuda, low_density_anomalies, setup_experiment, get_dataset, select_model
+from metrics import explanation_accuracy, nDCG
 from viz.training_viz import (plot_anomaly_score_distribution,
                               plot_anomaly_score_distribution_split, plot_tsne)
 
@@ -198,8 +198,8 @@ def run_config(cfg, logger, device):
         exp_name=experiment_name,
         step=10,
     )
-    ndcg = nDCG(feature_importance, expected_explanation)
     local_explanation_end_time = time.time()
+    ndcg = nDCG(feature_importance, expected_explanation)
 
     shap_explainer = ShapExplainer(model, data["X_train"])
     shap_start_time = time.time()
@@ -290,6 +290,12 @@ def main(cfg: omegaconf.DictConfig):
                 cfg.training_method.ratio = ratio
                 for sampling_method in ["deterministic"]:
                     cfg.training_method.sampling_method = sampling_method
+                    if cfg.model.model_name == "DTEC":
+                        for T in [100, 200, 400]:
+                            cfg.model.model_parameters.T = T
+                            for nb_bin in [7, 16, 32]:
+                                cfg.model.model_parameters.num_bins = nb_bin
+                                run_config(cfg, logger, device)
                     run_config(cfg, logger, device)
         else:
             run_config(cfg, logger, device)

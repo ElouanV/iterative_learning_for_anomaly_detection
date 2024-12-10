@@ -90,7 +90,11 @@ class SamplingIterativeLearning:
                 train_log["f1_scores"].append(f1)
                 train_log["roc_auc_scores"].append(roc)
         self.plot_training_log(train_log)
-        iterative_training_score_evolution(iteration_scores, exp_name=self.exp_name, saving_path=self.saving_path)
+        iterative_training_score_evolution(
+            iteration_scores,
+            exp_name=self.exp_name,
+            saving_path=self.saving_path,
+        )
         return current_model, train_log
 
     def plot_training_log(self, train_log):

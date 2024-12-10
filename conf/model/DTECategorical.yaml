@@ -2,6 +2,7 @@ model_name: 'DTEC'
 model_parameters:
   num_bins: 7
   hidden_size: [256,512,256]
+  T: 400
 
 training:
   epochs: 400
