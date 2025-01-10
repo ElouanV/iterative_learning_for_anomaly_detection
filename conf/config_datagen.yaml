@@ -16,6 +16,7 @@ defaults:
   - dataset: 'synthetic_generation' 
   - model: 'DTECategorical'
   - training_method: 'iterative_dataset_sampling'
+  - dataset_path: ???
   # - override hydra/launcher: 'joblib'
 
 

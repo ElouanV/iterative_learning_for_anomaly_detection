@@ -6,64 +6,65 @@ import hydra
 import numpy as np
 import omegaconf
 import pandas as pd
-import sklearn.metrics as skm
 from adbench.myutils import Utils
-from matplotlib import pyplot as plt
 
+from metrics import explanation_accuracy, nDCG_p
 from shap_explainer import ShapExplainer
-from training_method.iterative_learning import SamplingIterativeLearning
-from training_method.weighted_loss_iterative_learning import \
-    WeightedLossIterativeLearning
-from utils import (check_cuda, explanation_accuracy, get_dataset,
-                   low_density_anomalies, nDCG, select_model, setup_experiment)
-from viz.training_viz import (plot_anomaly_score_distribution,
-                              plot_anomaly_score_distribution_split, plot_tsne)
+from utils import (
+    check_cuda,
+    get_dataset,
+    low_density_anomalies,
+    select_model,
+    setup_experiment,
+)
 
 
-def train_model(
-    cfg,
-    model,
-    X_train,
-    y_train,
-    X_eval=None,
-    y_eval=None,
-    saving_path: Path = None,
-    exp_name: str = None,
+def explanation(
+    model, method, data, samples, expected_explanation, saving_path, exp_name
 ):
-    train_log = {}
-    if cfg.training_method.name == "unsupervised":
-        model, train_losses = model.fit(X_train, cfg.model)
-    elif cfg.training_method.name == "semi-supervised":
-        model, train_losses = model.fit(
-            X_train, y_train, model_config=cfg.model
-        )
-    elif cfg.training_method.name == "DSIL":
-        iterative_learning = SamplingIterativeLearning(
-            cfg,
+    start_time = time.time()
+    if method == "SHAP":
+        shap_explainer = ShapExplainer(model, data["X_train"])
+        explanation = shap_explainer.explain_instance(
+            samples,
+            expected_explanation=expected_explanation,
+            saving_path=saving_path,
+            experiment_name=exp_name,
+        ).squeeze()
+    elif method == "grad":
+        explanation = model.gradient_explanation(
+            samples,
+            expected_explanation=expected_explanation,
             saving_path=saving_path,
             exp_name=exp_name,
         )
-        model, train_log = iterative_learning.train(
-            X_train=X_train,
-            y_train=y_train,
-            X_eval=X_eval,
-            y_eval=y_eval,
-            model=model,
-            max_iter=cfg.training_method.max_iter,
+    elif method == "mean_diffusion_perturbation":
+        explanation = model.instance_explanation(
+            samples, saving_path=saving_path, step=10, agg="mean"
         )
-    elif cfg.training_method.name == "weighted_loss":
-        iterative_learning = WeightedLossIterativeLearning(cfg)
-        model, train_log = iterative_learning.train(
-            X_train,
-            y_train,
-            X_eval,
-            y_eval,
-            model,
-            cfg.iterative_learning.max_iter,
+    elif method == "max_diffusion_perturbation":
+        explanation = model.instance_explanation(
+            samples, saving_path=saving_path, step=10, agg="max"
+        )
+    elif method == "reconstruction_error" and model.model_name == "DDPM":
+        explanation = model.instance_explanation(
+            samples,
+            saving_path=saving_path,
+            step=10,
+            exp_name=exp_name,
+            expected_explanation=expected_explanation,
         )
     else:
-        raise ValueError(f"Unknown training method: {cfg.training_method.name}")
-    return model, train_log
+        raise NotImplementedError(f"Method {method} not implemented")
+    end_time = time.time()
+    explanation_time = end_time - start_time
+    nDCG = nDCG_p(
+        importance_scores=explanation, relevance_matrix=expected_explanation
+    )
+    accuracy = explanation_accuracy(
+        explanation=explanation, ground_truth=expected_explanation
+    )
+    return nDCG.mean(), accuracy.mean(), explanation_time, explanation
 
 
 def run_config(cfg, logger, device):
@@ -74,209 +75,166 @@ def run_config(cfg, logger, device):
     logger.info(
         f"Model name: {cfg.model.model_name}, dataset name: {cfg.dataset.dataset_name}, training method:"
         f" {cfg.training_method.name}, sampling name(if applicable):"
-        f" {cfg.training_method.sampling_method}, ratio(for iterative leaning"
+        f" {cfg.training_method.sampling_method}, ratio(for iterative learning"
         f" sampling method only): "
         f"{cfg.training_method.ratio if cfg.training_method =='iterative_dataset_sampling' else None}, random seed:   \
             {cfg.random_seed}"
     )
 
     model = select_model(cfg.model, device=device)
+    model_weights_path = Path(saving_path, "model.pth")
+    if model_weights_path.exists():
+        model.load_model(model_weights_path, X=data["X_train"])
+    else:
+        raise FileNotFoundError(
+            f"Model weights not found in {model_weights_path}. If you want to train the model with the given"
+            "configuration, use the 'train' script and run this script again."
+        )
 
-    # training, for unsupervised models the y label will be discarded
-    start_time = time.time()
+    score = model.predict_score(data["X_test"], device=device).squeeze()
+    data["y_test"][data["y_test"] > 0] = 1
+    metric_df = pd.read_csv(Path(saving_path, "model_metrics.csv"))
 
-    data["y_train"][data["y_train"] > 0] = 1
-    data["binary_y_test"] = data["y_test"].copy()
-    data["binary_y_test"][data["binary_y_test"] > 0] = 1
-    model, train_log = train_model(
-        cfg,
-        model,
-        data["X_train"],
-        data["y_train"],
-        X_eval=data["X_test"],
-        y_eval=data["binary_y_test"],
-        exp_name=experiment_name,
-        saving_path=saving_path,
-    )
-    end_time = time.time()
-    training_time = end_time - start_time
-
-    start_time = time.time()
-    score = model.predict_score(data["X_test"]).squeeze()
-    end_time = time.time()
-    inference_time = end_time - start_time
-
-    y_test_anomaly = data["y_test"].copy()
-    y_test_anomaly[y_test_anomaly > 0] = 1
     indices = np.arange(len(data["y_test"]))
     # Suppose we know how much anomaly are in the dataset
-    y_pred = low_density_anomalies(-score, len(indices[y_test_anomaly == 1]))
-    f1_score = skm.f1_score(y_test_anomaly, y_pred)
-    plot_tsne(
-        data,
-        y_test_anomaly,
-        y_pred,
-        exp_name=experiment_name,
-        saving_path=saving_path,
-    )
-    threshold = np.percentile(score, y_test_anomaly.mean() * 100)
-    plot_anomaly_score_distribution(
-        score, saving_path, exp_name=experiment_name, threshold=threshold
-    )
-    plot_anomaly_score_distribution_split(
-        score,
-        y_test_anomaly,
-        p=y_pred,
-        exp_name=experiment_name,
-        saving_path=saving_path,
-    )
-    if len(np.unique(data["y_test"])) > 2:
-        # TODO! refactor this code
-        detection_rate = []
-        for i in np.unique(data["y_test"])[1:]:
-            i_anomaly_indices = data["y_test"] == i
-            detection_rate.append(
-                np.sum(y_pred[i_anomaly_indices])
-                / np.sum(i_anomaly_indices)
-                * 100
-            )
-            logger.info(
-                f"Detection rate for class {i}: {detection_rate[-1]}, number of "
-                f"samples: {np.sum(i_anomaly_indices)}, detected samples: {np.sum(y_pred[i_anomaly_indices])}"
-            )
-        # Clear the plot
-        plt.clf()
-        plt.bar(np.unique(data["y_test"])[1:], detection_rate)
-        # Display count on top of the bar
-        plt.xticks(np.unique(data["y_test"]))
-        plt.ylabel("Detection rate")
-        plt.title(f"Detection rate per class, {experiment_name}")
-        plt.grid()
-        plt.savefig(Path(saving_path, "detection_rate_per_class.png"))
-        plt.show()
-
-    logger.info(f"F1 score: {f1_score}")
-
-    inds = np.where(np.isnan(score))
-    score[inds] = 0
-
-    result = utils.metric(y_true=y_test_anomaly, y_score=score)
-    logger.info(f'AUCROC: {result["aucroc"]}')
-
-    metric_df = {}
-    metric_df["training_time"] = training_time
-    metric_df["inference_time"] = inference_time
-    metric_df["f1_score"] = f1_score
-    metric_df["model_name"] = cfg.model.model_name
-    metric_df["dataset_name"] = cfg.dataset.dataset_name
-    metric_df["training_method"] = cfg.training_method.name
-    metric_df["sampling_method"] = cfg.training_method.sampling_method
-    metric_df["random_seed"] = cfg.random_seed
-    metric_df["aucroc"] = result["aucroc"]
-    metric_df = pd.DataFrame([metric_df])
-
-    # Explanation
-    start_global_explanation = time.time()
-    model.global_explanation(
-        data["X_test"],
-        y_pred=y_pred,
-        saving_path=saving_path,
-        experiment_name=experiment_name,
-        n_components=len(np.unique(data["y_test"])),
-        step=10,
-    )
-    end_global_explanation = time.time()
-    # Local explanation
+    y_pred = low_density_anomalies(-score, len(indices[data["y_test"] == 1]))
     samples_indices = np.arange(len(data["X_test"]))[y_pred == 1]
     samples = data["X_test"][samples_indices]
     expected_explanation = data["explanation_test"][samples_indices]
-    local_explanation_start_time = time.time()
-    feature_importance = model.instance_explanation(
-        samples,
-        expected_explanation=expected_explanation,
-        saving_path=saving_path,
-        exp_name=experiment_name,
-        step=10,
-    )
-    ndcg = nDCG(feature_importance, expected_explanation)
-    local_explanation_end_time = time.time()
+    existing_columns = metric_df.columns
+    if cfg.model.model_name == "DTEC":
+        # if "mean_diffusion_accuracy" not in existing_columns or True:
+        #     (
+        #         mean_diffusion_nDCG,
+        #         mean_diffusion_accuracy,
+        #         mean_diffusion_explanation_time,
+        #         mean_diffusion_explanation,
+        #     ) = explanation(
+        #         model,
+        #         "mean_diffusion_perturbation",
+        #         data,
+        #         samples,
+        #         expected_explanation,
+        #         saving_path,
+        #         experiment_name,
+        #     )
+        #     logger.info(
+        #         f"Mean diffusion feat importance NDCG: {mean_diffusion_nDCG.mean()}"
+        #     )
+        #     metric_df["mean_diffusion_accuracy"] = mean_diffusion_accuracy
+        #     metric_df["mean_diffusion_ndcg"] = mean_diffusion_nDCG
+        #     metric_df["mean_diffusion_time"] = mean_diffusion_explanation_time
+        # if "max_diffusion_accuracy" not in existing_columns:
+        #     (
+        #         max_diffusion_nDCG,
+        #         max_diffusion_accuracy,
+        #         max_diffusion_explanation_time,
+        #         max_diffusion_explanation,
+        #     ) = explanation(
+        #         model,
+        #         "max_diffusion_perturbation",
+        #         data,
+        #         samples,
+        #         expected_explanation,
+        #         saving_path,
+        #         experiment_name,
+        #     )
+        #     logger.info(
+        #         f"Max diffusion feature importance NDCG: {max_diffusion_nDCG.mean()}"
+        #     )
+        #     metric_df["max_diffusion_accuracy"] = max_diffusion_nDCG
+        #     metric_df["max_diffusion_ndcg"] = max_diffusion_accuracy
+        #     metric_df["max_diffusion_time"] = max_diffusion_explanation_time
+        # if "shap_explanation_accuracy" not in existing_columns:
+        #     shap_nDCG, shap_accuracy, shap_explanation_time, shap_explanation = (
+        #         explanation(
+        #             model,
+        #             "SHAP",
+        #             data,
+        #             samples,
+        #             expected_explanation,
+        #             saving_path,
+        #             experiment_name,
+        #         )
+        #     )
+        #     logger.info(f"Shap feature importance NDCG: {shap_nDCG.mean()}")
 
-    shap_explainer = ShapExplainer(model, data["X_train"])
-    shap_start_time = time.time()
-    shap_feature_importance = shap_explainer.explain_instance(
-        samples,
-        expected_explanation=expected_explanation,
-        saving_path=saving_path,
-        experiment_name=experiment_name,
-    ).squeeze()
-    shap_end_time = time.time()
-    shap_ndcg = nDCG(shap_feature_importance, expected_explanation)
+        #     metric_df["shap_explanation_accuracy"] = shap_accuracy
+        #     metric_df["shap_feature_importance_ndcg"] = shap_nDCG
+        #     metric_df["shap_explanation_time"] = shap_explanation_time
 
-    # Grad explainer
-    start_grad_time = time.time()
-    grad_feature_importance = model.gradient_explanation(
-        samples,
-        expected_explanation=expected_explanation,
-        saving_path=saving_path,
-        exp_name=experiment_name,
-    )
-    end_global_explanation = time.time()
-    grad_ndcg = nDCG(grad_feature_importance, expected_explanation)
-
-    # Compute explanation accuracy for all methods
-    grad_explanation_accuracy = explanation_accuracy(
-        explanation=grad_feature_importance, ground_truth=expected_explanation
-    )
-    shap_explanation_accuracy = explanation_accuracy(
-        explanation=shap_feature_importance, ground_truth=expected_explanation
-    )
-    feature_importance_accuracy = explanation_accuracy(
-        explanation=feature_importance, ground_truth=expected_explanation
-    )
-
-    metric_df["grad_explanation_accuracy"] = grad_explanation_accuracy
-    metric_df["shap_explanation_accuracy"] = shap_explanation_accuracy
-    metric_df["feature_importance_accuracy"] = feature_importance_accuracy
-    metric_df["grad_feature_importance_ndcg"] = grad_ndcg.mean()
-    metric_df["grad_explanation_time"] = (
-        end_global_explanation - start_grad_time
-    )
-
-    logger.info(f"Grad feature importance NDCG: {grad_ndcg.mean()}")
-    logger.info(f"Feature importance NDCG: {ndcg.mean()}")
-    logger.info(f"Shap feature importance NDCG: {shap_ndcg.mean()}")
-
-    metric_df["feature_importance_ndcg"] = ndcg.mean()
-    metric_df["shap_feature_importance_ndcg"] = shap_ndcg.mean()
-    metric_df["global_explanation_time"] = (
-        end_global_explanation - start_global_explanation
-    )
-    metric_df["local_explanation_time"] = (
-        local_explanation_end_time - local_explanation_start_time
-    )
-    metric_df["shap_explanation_time"] = shap_end_time - shap_start_time
-
-    train_log = pd.DataFrame(train_log)
-    if cfg.mode != "debug":
-        metric_df.to_csv(
-            Path(
+        if "grad_explanation_accuracy" not in existing_columns or True:
+            (
+                grad_nDCG,
+                grad_accuracy,
+                grad_explanation_time,
+                grad_explanation,
+            ) = explanation(
+                model,
+                "grad",
+                data,
+                samples,
+                expected_explanation,
                 saving_path,
-                "model_metrics.csv",
+                experiment_name,
             )
-        )
-        train_log.to_csv(
-            Path(
+            logger.info(f"Grad feature importance NDCG: {grad_nDCG.mean()}")
+            metric_df["grad_explanation_accuracy"] = grad_accuracy
+            metric_df["grad_explanation_time"] = grad_explanation_time
+            metric_df["grad_ndcg"] = grad_nDCG
+
+    elif cfg.model.model_name == "DDPM":
+        if "reconstruction_error_accuracy" not in existing_columns:
+            (
+                reconstruct_error_nDCG,
+                reconstruct_error_accuracy,
+                reconstruct_error_time,
+                reconstruct_error,
+            ) = explanation(
+                model,
+                method="reconstruction_error",
+                data=data,
+                samples=samples,
+                expected_explanation=expected_explanation,
+                saving_path=saving_path,
+                exp_name=experiment_name,
+            )
+            metric_df["reconstruction_error_accuracy"] = (
+                reconstruct_error_accuracy
+            )
+            metric_df["reconstruction_error_ndcg"] = reconstruct_error_nDCG
+            metric_df["reconstruction_error_time"] = reconstruct_error_time
+
+        if "shap_explanation_accuracy" not in existing_columns:
+            (
+                shap_nDCG,
+                shap_accuracy,
+                shap_explanation_time,
+                shap_explanation,
+            ) = explanation(
+                model,
+                "SHAP",
+                data,
+                samples,
+                expected_explanation,
                 saving_path,
-                "train_log.csv",
+                experiment_name,
             )
-        )
-        model.save_model(Path(saving_path, "model.pth"))
+            metric_df["shap_explanation_accuracy"] = shap_accuracy
+            metric_df["shap_feature_importance_ndcg"] = shap_nDCG
+            metric_df["shap_explanation_time"] = shap_explanation_time
+
+    metric_df.to_csv(Path(saving_path, "model_metrics.csv"), index=False)
     # Dump used configuration
     omegaconf.OmegaConf.save(cfg, Path(saving_path, "experiment_config.yaml"))
     logger.info(f"Everything saved in {saving_path}")
 
 
-@hydra.main(version_base=None, config_path="../conf", config_name="config")
+@hydra.main(
+    version_base=None,
+    config_path="../conf",
+    config_name="config_explainability",
+)
 def main(cfg: omegaconf.DictConfig):
     logger = logging.getLogger(__name__)
     device = check_cuda(logger, cfg.device)

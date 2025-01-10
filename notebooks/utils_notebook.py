@@ -2,8 +2,16 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-def histogram_experiment(mean_df, std_df, column, title, ylabel):
-    mean_df = mean_df.sort_values(by=["dimension", "anomaly_ratio"])
+def histogram_experiment(
+    mean_df, std_df, column, title, ylabel, synthetic=True
+):
+    if synthetic:
+        mean_df = mean_df.sort_values(
+            by=["dimension", "anomaly_ratio", "dataset_name"]
+        )
+        std_df = std_df.sort_values(
+            by=["dimension", "anomaly_ratio", "dataset_name"]
+        )
     datasets = mean_df["dataset_name"].unique()
     experiments = mean_df["experiment"].unique()
     bar_width = 0.2
@@ -30,12 +38,12 @@ def histogram_experiment(mean_df, std_df, column, title, ylabel):
     ax.set_xlabel("Datasets")
     ax.set_ylabel(ylabel)
     ax.set_title(title)
-    ax.set_xticks(r - 1 + bar_width * (num_experiments) / 2)
+    ax.set_xticks(r + bar_width * (num_experiments) / 2)
     ax.set_xticklabels(datasets)
 
     ax.legend()
     plt.grid()
-    plt.xticks(rotation=45)
+    plt.xticks(rotation=90)
     plt.show()
 
 
@@ -55,7 +63,7 @@ def dataframe_to_latex(
     # Replace _ by ' ' in values
     df = df.applymap(lambda x: str(x).replace("_", " "))
     # For float columns, round to 2 decimal places
-    for col in df.select_dtypes(include=[np.float64]).columns:
+    for col in df.select_dtypes(include=[np.float64, np.float32]).columns:
         df[col] = df[col].round(2)
     # Convert the DataFrame to LaTeX
     latex_str = df.to_latex(
@@ -69,11 +77,11 @@ def dataframe_to_latex(
     # Add optional caption and label
     if caption or label:
         latex_table = "\\begin{table}[ht]\n\\centering\n"
+        latex_table += latex_str
         if caption:
             latex_table += f"\\caption{{{caption}}}\n"
         if label:
             latex_table += f"\\label{{{label}}}\n"
-        latex_table += latex_str
         latex_table += "\\end{table}"
     else:
         latex_table = latex_str

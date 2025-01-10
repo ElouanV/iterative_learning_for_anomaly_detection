@@ -13,7 +13,7 @@ run_id: "all_db_all_training"
 
 defaults:
   - _self_
-  - dataset: A_synthetic_f4_s5000_c2_r0.05_0.05_seed_0
+  - dataset: A_synthetic_f10_s5000_c4_r0.033_0.033_0.033_seed_0
   - model: 'DTECategorical'
   - training_method: 'unsupervised'
   - override hydra/launcher: 'joblib'

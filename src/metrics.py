@@ -1,5 +1,5 @@
-import torch
 import numpy as np
+import torch
 
 
 def explanation_accuracy(ground_truth, explanation, k="auto"):
@@ -19,6 +19,8 @@ def explanation_accuracy(ground_truth, explanation, k="auto"):
         )
     if type(explanation) is torch.Tensor:
         explanation = explanation.cpu().detach().numpy()
+    if type(ground_truth) is torch.Tensor:
+        ground_truth = ground_truth.cpu().detach().numpy()
     accuracy = []
     for row in range(ground_truth.shape[0]):
         if k == "auto":
@@ -40,7 +42,10 @@ def explanation_accuracy(ground_truth, explanation, k="auto"):
     return np.mean(accuracy)
 
 
-def dcg_score_matrix(importance_scores, relevance_matrix):
+def dcg_score_matrix_p(importance_scores, relevance_matrix, p):
+    """
+    Compute the DCG scores at a given cutoff rank p.
+    """
     importance_scores = np.array(importance_scores)
     relevance_matrix = np.array(relevance_matrix)
     importance_scores = importance_scores.squeeze()
@@ -49,31 +54,68 @@ def dcg_score_matrix(importance_scores, relevance_matrix):
         importance_scores.shape == relevance_matrix.shape
     ), "importance_scores and relevance_matrix must have the same shape"
 
+    # Sort relevance based on importance scores
+    if len(importance_scores.shape) == 1:
+        importance_scores = importance_scores.reshape(1, -1)
+        relevance_matrix = relevance_matrix.reshape(1, -1)
+
     sorted_indices = np.argsort(importance_scores, axis=1)[:, ::-1]
     sorted_relevance = np.take_along_axis(
         relevance_matrix, sorted_indices, axis=1
     )
-    ranks = np.arange(1, importance_scores.shape[1] + 1)
-    dcg_scores = np.sum(sorted_relevance / np.log2(ranks + 1), axis=1)
+
+    # Consider only the top p items
+    sorted_relevance_p = sorted_relevance[:, :p]
+    ranks = np.arange(1, p + 1)  # Ranks from 1 to p
+
+    # Compute DCG scores
+    dcg_scores = np.sum(sorted_relevance_p / np.log2(ranks + 1), axis=1)
 
     return dcg_scores
 
 
-def idcg_score_matrix(relevance_matrix):
+def idcg_score_matrix_p(relevance_matrix, p):
+    """
+    Compute the IDCG scores at a given cutoff rank p.
+    """
+    if len(relevance_matrix.shape) == 1:
+        relevance_matrix = relevance_matrix.reshape(1, -1)
     relevance_matrix = np.array(relevance_matrix)
     sorted_relevance = np.sort(relevance_matrix, axis=1)[:, ::-1]
-    ranks = np.arange(1, relevance_matrix.shape[1] + 1)
-    idcg_scores = np.sum(sorted_relevance / np.log2(ranks + 1), axis=1)
+
+    # Consider only the top p items
+    sorted_relevance_p = sorted_relevance[:, :p]
+    ranks = np.arange(1, p + 1)  # Ranks from 1 to p
+
+    # Compute IDCG scores
+    idcg_scores = np.sum(sorted_relevance_p / np.log2(ranks + 1), axis=1)
+
     return idcg_scores
 
 
-def nDCG(importance_scores, relevance_matrix):
-    dcg_scores = dcg_score_matrix(importance_scores, relevance_matrix)
-    idcg_scores = idcg_score_matrix(relevance_matrix)
-    ndcg_scores = np.zeros_like(dcg_scores)
-    for i in range(len(dcg_scores)):
-        if idcg_scores[i] == 0:
-            ndcg_scores[i] = 0
+def nDCG_(importance_scores, relevance_matrix, p):
+    """
+    Compute the nDCG scores at a given cutoff rank p.
+    """
+    dcg_scores_p = dcg_score_matrix_p(importance_scores, relevance_matrix, p)
+    idcg_scores_p = idcg_score_matrix_p(relevance_matrix, p)
+
+    # Compute normalized DCG
+    ndcg_scores_p = np.zeros_like(dcg_scores_p)
+    for i in range(len(dcg_scores_p)):
+        if idcg_scores_p[i] == 0:
+            ndcg_scores_p[i] = 0
         else:
-            ndcg_scores[i] = dcg_scores[i] / idcg_scores[i]
-    return ndcg_scores
+            ndcg_scores_p[i] = dcg_scores_p[i] / idcg_scores_p[i]
+
+    return ndcg_scores_p
+
+
+def nDCG_p(importance_scores, relevance_matrix):
+    nDCG_scores = []
+    if len(importance_scores.shape) == 1:
+        importance_scores = importance_scores.reshape(1, -1)
+    for i in range(importance_scores.shape[0]):
+        p = int(np.sum(relevance_matrix[i]))
+        nDCG_scores.append(nDCG_(importance_scores[i], relevance_matrix[i], p))
+    return np.array(nDCG_scores)

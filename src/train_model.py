@@ -10,11 +10,59 @@ import sklearn.metrics as skm
 from adbench.myutils import Utils
 from matplotlib import pyplot as plt
 
-from train_model import train_model
+from training_method.iterative_learning import SamplingIterativeLearning
+from training_method.weighted_loss_iterative_learning import \
+    WeightedLossIterativeLearning
 from utils import (check_cuda, get_dataset, low_density_anomalies,
-                   select_model, setup_experiment, train_model)
+                   select_model, setup_experiment)
 from viz.training_viz import (plot_anomaly_score_distribution,
                               plot_anomaly_score_distribution_split, plot_tsne)
+
+
+def train_model(
+    cfg,
+    model,
+    X_train,
+    y_train,
+    X_eval=None,
+    y_eval=None,
+    saving_path: Path = None,
+    exp_name: str = None,
+):
+    train_log = {}
+    if cfg.training_method.name == "unsupervised":
+        model, train_losses = model.fit(X_train, cfg.model)
+    elif cfg.training_method.name == "semi-supervised":
+        model, train_losses = model.fit(
+            X_train, y_train, model_config=cfg.model
+        )
+    elif cfg.training_method.name == "DSIL":
+        iterative_learning = SamplingIterativeLearning(
+            cfg,
+            saving_path=saving_path,
+            exp_name=exp_name,
+        )
+        model, train_log = iterative_learning.train(
+            X_train=X_train,
+            y_train=y_train,
+            X_eval=X_eval,
+            y_eval=y_eval,
+            model=model,
+            max_iter=cfg.training_method.max_iter,
+        )
+    elif cfg.training_method.name == "weighted_loss":
+        iterative_learning = WeightedLossIterativeLearning(cfg)
+        model, train_log = iterative_learning.train(
+            X_train,
+            y_train,
+            X_eval,
+            y_eval,
+            model,
+            cfg.iterative_learning.max_iter,
+        )
+    else:
+        raise ValueError(f"Unknown training method: {cfg.training_method.name}")
+    return model, train_log
 
 
 def run_config(cfg, logger, device):
@@ -31,6 +79,9 @@ def run_config(cfg, logger, device):
             {cfg.random_seed}"
     )
 
+    # if Path(saving_path, "model_metrics.csv").exists() and Path(saving_path, "model.pth").exists():
+    #     logger.info("Experiment already done, skipping")
+    #     return
     model = select_model(cfg.model, device=device)
 
     # training, for unsupervised models the y label will be discarded
@@ -156,22 +207,13 @@ def main(cfg: omegaconf.DictConfig):
         )
     if cfg.mode == "benchmark":
         if cfg.training_method.name == "DSIL":
-            for ratio in [0.5]:
+            for ratio in ["cosine", "exponential"]:
                 cfg.training_method.ratio = ratio
                 for sampling_method in ["deterministic"]:
                     cfg.training_method.sampling_method = sampling_method
-                    if cfg.model.model_name == "DTEC":
-                        for T in [100, 200, 400]:
-                            cfg.model.model_parameters.T = T
-                            for nb_bin in [7, 16]:
-                                cfg.model.model_parameters.num_bins = nb_bin
-                                run_config(cfg, logger, device)
-        elif cfg.training_method.name == "unsupervised":
-            for T in [100, 200, 400]:
-                cfg.model.model_parameters.T = T
-                for nb_bin in [7, 16, 32]:
-                    cfg.model.model_parameters.num_bins = nb_bin
                     run_config(cfg, logger, device)
+        elif cfg.training_method.name == "unsupervised":
+            run_config(cfg, logger, device)
         else:
             run_config(cfg, logger, device)
     elif cfg.mode == "debug":
@@ -179,6 +221,8 @@ def main(cfg: omegaconf.DictConfig):
         if cfg.training_method.name == "DSIL":
             cfg.training_method.max_iter = 2
         run_config(cfg, logger, device)
+    else:
+        print(f"Unknown mode: {cfg.mode}")
 
 
 if __name__ == "__main__":

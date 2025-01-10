@@ -362,6 +362,7 @@ class DDPM(BaseModel):
         self.epochs = epochs
         self.batch_size = batch_size
         self.lr = lr
+        self.model_name = model_name
         self.weight_decay = weight_decay
         self.full_path = full_path
 
@@ -481,9 +482,9 @@ class DDPM(BaseModel):
         with torch.no_grad():
             b = x.shape[0]
             xs = []
-            x_noisy, _ = self.forward_noise(
-                x, torch.full((b,), t, device=self.device).long()
-            )
+            # x_noisy, _ = self.forward_noise(
+            #     x, torch.full((b,), t, device=self.device).long()
+            # )
             x_noisy = x
             for i in reversed(range(0, t)):
                 x_noisy = self.sample(
@@ -553,6 +554,9 @@ class DDPM(BaseModel):
                 loss.backward()
                 optimizer.step()
                 loss_.append(loss.item())
+                # Free GPU memory
+                del x
+                del loss
 
             train_losses.append(np.mean(np.array(loss_)))
             if epoch > 50:
@@ -682,7 +686,7 @@ class DDPM(BaseModel):
         expected_explanation,
         saving_path,
         exp_name,
-        plot=True,
+        plot=False,
         **kwargs,
     ):
         if len(x.shape) == 1:
@@ -754,9 +758,52 @@ class DDPM(BaseModel):
 
         return anomaly_reconstruction_error, normal_reconstruction_error, w, h
 
+    def gradient_explanation(
+        self, x, expected_explanation, saving_path, exp_name, plot=False
+    ):
+        """
+        Compute the gradient of the model with respect to the input to compute feature importance vector for each sample
+        """
+        if len(x.shape) == 1:
+            x = x.reshape(1, -1)
+
+        feature_importance = []
+        data_loader = DataLoader(
+            torch.from_numpy(x).float(),
+            batch_size=100,
+            shuffle=False,
+            drop_last=False,
+        )
+        for i, x in tqdm(enumerate(data_loader), desc="Gradient explanation"):
+            x = x.to(self.device)
+            x.requires_grad = True
+            self.model.zero_grad()
+            reconstructed_x = self.raw_prediction(x)[-1]
+            reconstructed_x = reconstructed_x.to("cpu")
+            x = x.to("cpu")
+            error = torch.abs(x - reconstructed_x)
+            # Backprog the error to get gradient on x
+            error.sum().backward()
+            # Get the gradient
+            grad = x.grad
+            grad = grad.abs().sum(dim=1)
+            feature_importance.append(grad)
+        feature_importance = np.concatenate(feature_importance, axis=0)
+
+        # Normalize the gradient
+        feature_importance = torch.from_numpy(feature_importance)
+        feature_importance = torch.nn.functional.softmax(
+            feature_importance, dim=1
+        )
+        return feature_importance.squeeze()
+
     def save_model(self, path):
         torch.save(self.model.state_dict(), path)
 
-    def load_model(self, path):
-        self.model.load_state_dict(torch.load(path))
+    def load_model(self, path, X):
+        if self.model is None:
+            self.model = ResNetDiffusion(
+                X.shape[-1], 0, self.resnet_parameters
+            ).to(self.device)
+        self.model.load_state_dict(torch.load(path, weights_only=True))
         return self

@@ -159,8 +159,6 @@ def setup_experiment(cfg: dict):
 
 
 def check_cuda(logger, device=None):
-    import torch
-
     if torch.cuda.is_available():
         print(f"Cuda version: {torch.version.cuda}")
     else:
@@ -181,8 +179,6 @@ def low_density_anomalies(test_log_probs, num_anomalies):
     preds = np.zeros(len(test_log_probs))
     preds[anomaly_indices] = 1
     return preds
-
-
 
 
 def dataframe_to_latex(
@@ -236,5 +232,3 @@ def dataframe_to_latex(
         latex_table = latex_str
 
     return latex_table
-
-

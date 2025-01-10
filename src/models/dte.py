@@ -252,8 +252,6 @@ class DTE:
         return err
 
 
-
-
 class DTECategorical(DTE):
     def __init__(
         self,
@@ -303,14 +301,19 @@ class DTECategorical(DTE):
         return loss
 
     def instance_explanation(
-        self, x, expected_explanation, saving_path, exp_name, step=10
+        self,
+        x,
+        step=10,
+        saving_path=None,
+        agg="mean",
     ):
         if len(x.shape) == 1:
             x = x.reshape(1, -1)
 
         nb_samples, nb_features = x.shape
         err = np.zeros((nb_samples, nb_features))
-
+        if agg == "max":
+            arg_max = []
         t0 = self.predict_score(x)
         # variables individuelles
         for i in tqdm(range(x.shape[-1]), desc="Single features"):
@@ -331,16 +334,15 @@ class DTECategorical(DTE):
 
             # Compute the mean error across timesteps for this feature
             err_i = np.array(err_i)  # Shape: (num_timesteps, nb_samples)
-            mean_err_i = np.mean(err_i, axis=0)
-            err[:, i] = mean_err_i
-        for i in range(x.shape[0]):
-
-            plot_feature_importance(
-                err[i, :],
-                expected_explanation=expected_explanation[i],
-                exp_name=exp_name,
-                saving_path=saving_path,
-            )
+            if agg == "mean":
+                err_i = np.mean(err_i, axis=0)
+            elif agg == "max":
+                arg_max_i = np.argmax(err_i, axis=0)
+                arg_max.append(arg_max_i)
+                err_i = np.max(err_i, axis=0)
+            err[:, i] = err_i
+        if agg == "max":
+            np.save(Path(saving_path, "arg_max.npy"), arg_max)
         return np.array(err).squeeze()
 
     def gradient_explanation(
@@ -412,7 +414,7 @@ class DTECategorical(DTE):
         #     Path(saving_path, "couple_feature_score.npy"), couple_feature_score
         # )
         return feature_score  # couple_feature_score
-    
+
     def save_model(self, path):
         self.logger.info(f"Saving model to {path}")
         torch.save(self.model.state_dict(), path)
@@ -422,6 +424,7 @@ class DTECategorical(DTE):
             [X.shape[-1]] + self.hidden_size, num_bins=self.num_bins
         ).to(self.device)
         self.model.load_state_dict(torch.load(path))
+
 
 class DTEInverseGamma(DTE):
     def __init__(
