@@ -11,8 +11,8 @@ from torch.optim import Adam
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from models.losses import WMSELoss
-from viz.training_viz import plot_feature_importance
+from src.models.losses import WMSELoss
+from src.viz.training_viz import plot_feature_importance
 
 
 class MLP(nn.Module):
@@ -163,6 +163,7 @@ class DTE:
             self.model.parameters(), lr=self.lr, weight_decay=self.weight_decay
         )
         data = X_train if weights is None else (X_train, weights)
+
         train_loader = DataLoader(
             torch.from_numpy(data).float(),
             batch_size=self.batch_size,
@@ -202,8 +203,10 @@ class DTE:
         return self, train_losses
 
     def predict_score(self, X, give_preds_binned=False, device="cuda"):
+        if isinstance(X, np.ndarray):
+            X = torch.from_numpy(X).float()
         test_loader = DataLoader(
-            torch.from_numpy(X).float(),
+            X, 
             batch_size=100,
             shuffle=False,
             drop_last=False,
@@ -315,8 +318,7 @@ class DTECategorical(DTE):
         if agg == "max":
             arg_max = []
         t0 = self.predict_score(x)
-        # variables individuelles
-        for i in tqdm(range(x.shape[-1]), desc="Single features"):
+        for i in range(x.shape[-1]):
             err_i = []
             for t in range(0, self.T, step):
                 X_noisy = np.copy(x)
@@ -345,16 +347,12 @@ class DTECategorical(DTE):
             np.save(Path(saving_path, "arg_max.npy"), arg_max)
         return np.array(err).squeeze()
 
-    def gradient_explanation(
-        self, x, expected_explanation, saving_path, exp_name, plot=False
-    ):
+    def gradient_explanation(self, x):
         """
         Compute the gradient of the model with respect to the input to compute feature importance vector for each sample
         """
         if len(x.shape) == 1:
             x = x.reshape(1, -1)
-
-        nb_samples = x.shape[0]
 
         feature_importance = []
         data_loader = DataLoader(
@@ -372,14 +370,6 @@ class DTECategorical(DTE):
             gradient_batch = x.grad.cpu().detach().numpy()
             feature_importance.append(gradient_batch)
         feature_importance = np.concatenate(feature_importance, axis=0)
-        if plot:
-            for i in range(nb_samples):
-                plot_feature_importance(
-                    feature_importance[i],
-                    expected_explanation=expected_explanation[i],
-                    exp_name=exp_name,
-                    saving_path=saving_path,
-                )
         # Normalize the gradient
         feature_importance = torch.from_numpy(feature_importance)
         feature_importance = torch.nn.functional.softmax(

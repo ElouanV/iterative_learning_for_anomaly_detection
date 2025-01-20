@@ -3,17 +3,17 @@ save_fig: True
 output_path: 'results'
 device: 'auto'
 mode: 'benchmark' # 'benchmark' or 'debug'
+force_rerun: True
 
-
-realistic_synthetic_mode: null
+realistic_synthetic_mode: ["global", "additive_noise", "multiplicative_noise", "local"]
 alpha: 5
 percentage: 0.1
-run_id: "all_db_all_training"
+run_id: "adbench_synthetic_anomaly"
 
 
 defaults:
   - _self_
-  - dataset: A_synthetic_f4_s5000_c2_r0.05_0.05_seed_0
+  - dataset: WBC
   - model: 'DTECategorical'
   - training_method: 'unsupervised'
   - override hydra/launcher: 'joblib'
@@ -25,5 +25,5 @@ hydra:
   sweeper: 
     params:
       # All datasets that start with A_synthetic
-      dataset:  glob(A_synthetic_f*)
+      dataset:  glob(*,A_synthetic_f*)
       training_method: unsupervised, iterative_dataset_sampling

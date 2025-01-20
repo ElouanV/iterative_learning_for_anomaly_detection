@@ -3,7 +3,7 @@ save_fig: True
 output_path: 'results'
 device: 'auto'
 mode: 'benchmark' # 'benchmark' or 'debug'
-
+force_rerun: True
 
 realistic_synthetic_mode: null
 alpha: 5
@@ -13,9 +13,9 @@ run_id: "all_db_all_training"
 
 defaults:
   - _self_
-  - dataset: A_synthetic_f10_s5000_c4_r0.033_0.033_0.033_seed_0
+  - dataset: A_synthetic_f4_s5000_c2_r0.025_0.025_seed_0
   - model: 'DTECategorical'
-  - training_method: 'unsupervised'
+  - training_method: 'iterative_dataset_sampling'
   - override hydra/launcher: 'joblib'
 
 
@@ -25,5 +25,5 @@ hydra:
   sweeper: 
     params:
       # All datasets that start with A_synthetic
-      dataset:  glob(A_synthetic_f*)
-      training_method: unsupervised, iterative_dataset_sampling
+      dataset:  glob(*,A_synthetic_f*)
+      training_method: iterative_dataset_sampling

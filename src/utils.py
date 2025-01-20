@@ -4,10 +4,9 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from dataset.data_generator import DataGenerator
-from models.ddpm import DDPM
-from models.deepsvdd.deepSVDD import DeepSVDD
-from models.dte import DTECategorical, DTEInverseGamma
+from src.dataset.adbench_synthetic_anomalies import DataGenerator
+from src.models.ddpm import DDPM
+from src.models.dte import DTECategorical, DTEInverseGamma
 
 
 def select_model(model_config: dict, device):
@@ -45,16 +44,7 @@ def select_model(model_config: dict, device):
             device=device,
             T=model_config.model_parameters.T,
         )
-    elif model_config.model_name == "DeepSVDD":
-        model = DeepSVDD(
-            nu=model_config.model_parameters.nu,
-        )
-        model.set_network(
-            model_config.model_parameters.net_name,
-            input_dim=model_config.model_parameters.input_dim,
-            model_config=model_config,
-        )
-        return model
+
 
 
 def count_ano(indices, y):
@@ -119,7 +109,7 @@ def get_dataset(cfg: Path):
     data = datagenerator.generator(
         la=0,
         max_size=50000,
-        realistic_synthetic_mode=cfg.realistic_synthetic_mode,
+        synthetic_anomalies=cfg.realistic_synthetic_mode,
         alpha=cfg.alpha,
         percentage=cfg.percentage,
     )  # maximum of 50,000 data points are available
@@ -148,7 +138,7 @@ def setup_experiment(cfg: dict):
         (
             cfg.dataset.dataset_name
             + (
-                f"_{cfg.realistic_synthetic_mode}"
+                f"_{'_'.join(cfg.realistic_synthetic_mode)}"
                 if cfg.realistic_synthetic_mode
                 else ""
             )

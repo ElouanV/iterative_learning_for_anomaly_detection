@@ -10,13 +10,8 @@ from adbench.myutils import Utils
 
 from metrics import explanation_accuracy, nDCG_p
 from shap_explainer import ShapExplainer
-from utils import (
-    check_cuda,
-    get_dataset,
-    low_density_anomalies,
-    select_model,
-    setup_experiment,
-)
+from utils import (check_cuda, get_dataset, low_density_anomalies,
+                   select_model, setup_experiment)
 
 
 def explanation(
@@ -64,6 +59,9 @@ def explanation(
     accuracy = explanation_accuracy(
         explanation=explanation, ground_truth=expected_explanation
     )
+    # Save explanation and expected explanation
+    np.save(Path(saving_path, f"{method}_explanation.npy"), explanation)
+    np.save(Path(saving_path, f"{method}_expected_explanation.npy"), expected_explanation)
     return nDCG.mean(), accuracy.mean(), explanation_time, explanation
 
 
@@ -94,7 +92,7 @@ def run_config(cfg, logger, device):
     score = model.predict_score(data["X_test"], device=device).squeeze()
     data["y_test"][data["y_test"] > 0] = 1
     metric_df = pd.read_csv(Path(saving_path, "model_metrics.csv"))
-
+    force_rerun = cfg.force_rerun
     indices = np.arange(len(data["y_test"]))
     # Suppose we know how much anomaly are in the dataset
     y_pred = low_density_anomalies(-score, len(indices[data["y_test"] == 1]))
@@ -102,68 +100,74 @@ def run_config(cfg, logger, device):
     samples = data["X_test"][samples_indices]
     expected_explanation = data["explanation_test"][samples_indices]
     existing_columns = metric_df.columns
+    np.save(Path(saving_path, "samples_to_explain.npy"), samples)
+    samples_labels = data["y_test"][samples_indices]
+    np.save(Path(saving_path, "samples_to_explain_labels.npy"),  samples_labels)
     if cfg.model.model_name == "DTEC":
-        # if "mean_diffusion_accuracy" not in existing_columns or True:
-        #     (
-        #         mean_diffusion_nDCG,
-        #         mean_diffusion_accuracy,
-        #         mean_diffusion_explanation_time,
-        #         mean_diffusion_explanation,
-        #     ) = explanation(
-        #         model,
-        #         "mean_diffusion_perturbation",
-        #         data,
-        #         samples,
-        #         expected_explanation,
-        #         saving_path,
-        #         experiment_name,
-        #     )
-        #     logger.info(
-        #         f"Mean diffusion feat importance NDCG: {mean_diffusion_nDCG.mean()}"
-        #     )
-        #     metric_df["mean_diffusion_accuracy"] = mean_diffusion_accuracy
-        #     metric_df["mean_diffusion_ndcg"] = mean_diffusion_nDCG
-        #     metric_df["mean_diffusion_time"] = mean_diffusion_explanation_time
-        # if "max_diffusion_accuracy" not in existing_columns:
-        #     (
-        #         max_diffusion_nDCG,
-        #         max_diffusion_accuracy,
-        #         max_diffusion_explanation_time,
-        #         max_diffusion_explanation,
-        #     ) = explanation(
-        #         model,
-        #         "max_diffusion_perturbation",
-        #         data,
-        #         samples,
-        #         expected_explanation,
-        #         saving_path,
-        #         experiment_name,
-        #     )
-        #     logger.info(
-        #         f"Max diffusion feature importance NDCG: {max_diffusion_nDCG.mean()}"
-        #     )
-        #     metric_df["max_diffusion_accuracy"] = max_diffusion_nDCG
-        #     metric_df["max_diffusion_ndcg"] = max_diffusion_accuracy
-        #     metric_df["max_diffusion_time"] = max_diffusion_explanation_time
-        # if "shap_explanation_accuracy" not in existing_columns:
-        #     shap_nDCG, shap_accuracy, shap_explanation_time, shap_explanation = (
-        #         explanation(
-        #             model,
-        #             "SHAP",
-        #             data,
-        #             samples,
-        #             expected_explanation,
-        #             saving_path,
-        #             experiment_name,
-        #         )
-        #     )
-        #     logger.info(f"Shap feature importance NDCG: {shap_nDCG.mean()}")
+        if "mean_diffusion_accuracy" not in existing_columns or force_rerun:
+            (
+                mean_diffusion_nDCG,
+                mean_diffusion_accuracy,
+                mean_diffusion_explanation_time,
+                mean_diffusion_explanation,
+            ) = explanation(
+                model,
+                "mean_diffusion_perturbation",
+                data,
+                samples,
+                expected_explanation,
+                saving_path,
+                experiment_name,
+            )
+            logger.info(
+                f"Mean diffusion feat importance NDCG: {mean_diffusion_nDCG.mean()}"
+            )
+            metric_df["mean_diffusion_accuracy"] = mean_diffusion_accuracy
+            metric_df["mean_diffusion_ndcg"] = mean_diffusion_nDCG
+            metric_df["mean_diffusion_time"] = mean_diffusion_explanation_time
+        if "max_diffusion_accuracy" not in existing_columns or force_rerun:
+            (
+                max_diffusion_nDCG,
+                max_diffusion_accuracy,
+                max_diffusion_explanation_time,
+                max_diffusion_explanation,
+            ) = explanation(
+                model,
+                "max_diffusion_perturbation",
+                data,
+                samples,
+                expected_explanation,
+                saving_path,
+                experiment_name,
+            )
+            logger.info(
+                f"Max diffusion feature importance NDCG: {max_diffusion_nDCG.mean()}"
+            )
+            metric_df["max_diffusion_accuracy"] = max_diffusion_nDCG
+            metric_df["max_diffusion_ndcg"] = max_diffusion_accuracy
+            metric_df["max_diffusion_time"] = max_diffusion_explanation_time
+        if "shap_explanation_accuracy" not in existing_columns or force_rerun:
+            (
+                shap_nDCG,
+                shap_accuracy,
+                shap_explanation_time,
+                shap_explanation,
+            ) = explanation(
+                model,
+                "SHAP",
+                data,
+                samples,
+                expected_explanation,
+                saving_path,
+                experiment_name,
+            )
+            logger.info(f"Shap feature importance NDCG: {shap_nDCG.mean()}")
 
-        #     metric_df["shap_explanation_accuracy"] = shap_accuracy
-        #     metric_df["shap_feature_importance_ndcg"] = shap_nDCG
-        #     metric_df["shap_explanation_time"] = shap_explanation_time
+            metric_df["shap_explanation_accuracy"] = shap_accuracy
+            metric_df["shap_feature_importance_ndcg"] = shap_nDCG
+            metric_df["shap_explanation_time"] = shap_explanation_time
 
-        if "grad_explanation_accuracy" not in existing_columns or True:
+        if "grad_explanation_accuracy" not in existing_columns or force_rerun:
             (
                 grad_nDCG,
                 grad_accuracy,
@@ -184,7 +188,10 @@ def run_config(cfg, logger, device):
             metric_df["grad_ndcg"] = grad_nDCG
 
     elif cfg.model.model_name == "DDPM":
-        if "reconstruction_error_accuracy" not in existing_columns:
+        if (
+            "reconstruction_error_accuracy" not in existing_columns
+            or force_rerun
+        ):
             (
                 reconstruct_error_nDCG,
                 reconstruct_error_accuracy,
@@ -205,7 +212,7 @@ def run_config(cfg, logger, device):
             metric_df["reconstruction_error_ndcg"] = reconstruct_error_nDCG
             metric_df["reconstruction_error_time"] = reconstruct_error_time
 
-        if "shap_explanation_accuracy" not in existing_columns:
+        if "shap_explanation_accuracy" not in existing_columns or force_rerun:
             (
                 shap_nDCG,
                 shap_accuracy,
