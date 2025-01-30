@@ -8,10 +8,10 @@ import omegaconf
 import pandas as pd
 from adbench.myutils import Utils
 
-from metrics import explanation_accuracy, nDCG_p
-from shap_explainer import ShapExplainer
-from utils import (check_cuda, get_dataset, low_density_anomalies,
-                   select_model, setup_experiment)
+from src.metrics import explanation_accuracy, nDCG_p
+from src.shap_explainer import ShapExplainer
+from src.utils import (check_cuda, get_dataset, low_density_anomalies,
+                       select_model, setup_experiment)
 
 
 def explanation(
@@ -22,16 +22,10 @@ def explanation(
         shap_explainer = ShapExplainer(model, data["X_train"])
         explanation = shap_explainer.explain_instance(
             samples,
-            expected_explanation=expected_explanation,
-            saving_path=saving_path,
-            experiment_name=exp_name,
         ).squeeze()
     elif method == "grad":
         explanation = model.gradient_explanation(
             samples,
-            expected_explanation=expected_explanation,
-            saving_path=saving_path,
-            exp_name=exp_name,
         )
     elif method == "mean_diffusion_perturbation":
         explanation = model.instance_explanation(
@@ -61,7 +55,10 @@ def explanation(
     )
     # Save explanation and expected explanation
     np.save(Path(saving_path, f"{method}_explanation.npy"), explanation)
-    np.save(Path(saving_path, f"{method}_expected_explanation.npy"), expected_explanation)
+    np.save(
+        Path(saving_path, f"{method}_expected_explanation.npy"),
+        expected_explanation,
+    )
     return nDCG.mean(), accuracy.mean(), explanation_time, explanation
 
 
@@ -102,7 +99,7 @@ def run_config(cfg, logger, device):
     existing_columns = metric_df.columns
     np.save(Path(saving_path, "samples_to_explain.npy"), samples)
     samples_labels = data["y_test"][samples_indices]
-    np.save(Path(saving_path, "samples_to_explain_labels.npy"),  samples_labels)
+    np.save(Path(saving_path, "samples_to_explain_labels.npy"), samples_labels)
     if cfg.model.model_name == "DTEC":
         if "mean_diffusion_accuracy" not in existing_columns or force_rerun:
             (
@@ -143,8 +140,8 @@ def run_config(cfg, logger, device):
             logger.info(
                 f"Max diffusion feature importance NDCG: {max_diffusion_nDCG.mean()}"
             )
-            metric_df["max_diffusion_accuracy"] = max_diffusion_nDCG
-            metric_df["max_diffusion_ndcg"] = max_diffusion_accuracy
+            metric_df["max_diffusion_accuracy"] = max_diffusion_accuracy
+            metric_df["max_diffusion_ndcg"] = max_diffusion_nDCG
             metric_df["max_diffusion_time"] = max_diffusion_explanation_time
         if "shap_explanation_accuracy" not in existing_columns or force_rerun:
             (

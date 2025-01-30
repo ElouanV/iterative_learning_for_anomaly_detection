@@ -206,7 +206,7 @@ class DTE:
         if isinstance(X, np.ndarray):
             X = torch.from_numpy(X).float()
         test_loader = DataLoader(
-            X, 
+            X,
             batch_size=100,
             shuffle=False,
             drop_last=False,
@@ -343,7 +343,7 @@ class DTECategorical(DTE):
                 arg_max.append(arg_max_i)
                 err_i = np.max(err_i, axis=0)
             err[:, i] = err_i
-        if agg == "max":
+        if agg == "max" and saving_path:
             np.save(Path(saving_path, "arg_max.npy"), arg_max)
         return np.array(err).squeeze()
 
@@ -355,13 +355,15 @@ class DTECategorical(DTE):
             x = x.reshape(1, -1)
 
         feature_importance = []
+        if isinstance(x, np.ndarray):
+            x = torch.from_numpy(x).float()
         data_loader = DataLoader(
-            torch.from_numpy(x).float(),
+            x,
             batch_size=100,
             shuffle=False,
             drop_last=False,
         )
-        for i, x in tqdm(enumerate(data_loader), desc="Gradient explanation"):
+        for i, x in enumerate(data_loader):
             x = x.to(self.device)
             x.requires_grad = True
             self.model.zero_grad()

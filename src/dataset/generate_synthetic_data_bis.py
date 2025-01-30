@@ -74,13 +74,13 @@ def plot_graph(graphical_model, saving_path=None):
 
 def select_feature(n_features, n):
     """ """
-    selected_features = np.random.choice(
-        np.array(range(n_features)), n
-    )
+    selected_features = np.random.choice(np.array(range(n_features)), n)
     return selected_features
 
 
-def add_anomalies(X, graphical_model, anomalies_scheme: dict, ratio_anomalies: list):
+def add_anomalies(
+    X, graphical_model, anomalies_scheme: dict, ratio_anomalies: list
+):
     assert len(anomalies_scheme.keys()) == len(ratio_anomalies)
     splits = split_list(list(range(X.shape[0])), ratio_anomalies)
     explanation = np.zeros(X.shape)
@@ -117,7 +117,9 @@ def add_anomalies(X, graphical_model, anomalies_scheme: dict, ratio_anomalies: l
             alpha = anomalies_info["alpha"]
             low = alpha * X[:, selected_features].min(axis=0)
             high = X[:, selected_features].max(axis=0) * alpha
-            new_values = np.random.uniform(low, high, X[indices, selected_features].shape)
+            new_values = np.random.uniform(
+                low, high, X[indices, selected_features].shape
+            )
             y[indices] = anomaly_code[anomaly]
             explanation[indices] = np.zeros(X[indices].shape)
             explanation[indices, selected_features] = 1
@@ -166,7 +168,10 @@ def add_anomalies(X, graphical_model, anomalies_scheme: dict, ratio_anomalies: l
 
 
 def generate_graphical_model(
-    n_features: int, number_of_causalities: int, distributions: list, saving_path: str
+    n_features: int,
+    number_of_causalities: int,
+    distributions: list,
+    saving_path: str,
 ):
     feature_distributions = random.choices(distributions, k=n_features)
     graphical_model = generate_random_dag_with_edges(
@@ -218,7 +223,10 @@ def generate_synthetic_data(
     """ """
     os.makedirs(saving_path, exist_ok=True)
     graphical_model = generate_graphical_model(
-        n_features, n_causalities, distributions=distributions, saving_path=saving_path
+        n_features,
+        n_causalities,
+        distributions=distributions,
+        saving_path=saving_path,
     )
     X = run_graphical_model(graphical_model, n_samples)
     anomalies_scheme = None
@@ -227,21 +235,20 @@ def generate_synthetic_data(
         X, graphical_model, anomalies=anomalies, ratio_anomalies=ratio_aomalies
     )
 
-
     #######
     data = {
         "X": np.array(X),
         "y": np.array(y),
         "explanation": np.array(explanation),
     }
-    with open(os.path.join(saving_path, "anomaly_information.yaml"), "w") as file:
+    with open(
+        os.path.join(saving_path, "anomaly_information.yaml"), "w"
+    ) as file:
         yaml.dump(anomaly_information, file)
     pickle.dump(data, open(os.path.join(saving_path, "data.npy"), "wb"))
     np.save(os.path.join(saving_path, "features.npy"), np.array(X))
     np.save(os.path.join(saving_path, "labels.npy"), np.array(y))
-    np.save(
-        os.path.join(saving_path, "explanation.npy"), np.array(explanation)
-    )
+    np.save(os.path.join(saving_path, "explanation.npy"), np.array(explanation))
     # Generate yalm config file:
     config = {
         "data_type": "tabular",
@@ -279,7 +286,7 @@ def generate_anomalies_scheme(anomalies: list, n_features):
             alpha = 1.025
             anomaly_scheme[anomaly] = {
                 "alpha": alpha,
-                "features": selected_features.tolist()
+                "features": selected_features.tolist(),
             }
         elif anomaly == "dependecy":
             # Remove the causality between the features
@@ -326,7 +333,9 @@ def generate_anomalies_scheme(anomalies: list, n_features):
     return anomaly_scheme
 
 
-def generate_dataset(graphical_model, anomalies_scheme, n_samples, ratio_anomalies, seed=42):
+def generate_dataset(
+    graphical_model, anomalies_scheme, n_samples, ratio_anomalies, seed=42
+):
     # Set the seed
     np.random.seed(seed)
     random.seed(seed)
@@ -339,63 +348,83 @@ def generate_dataset(graphical_model, anomalies_scheme, n_samples, ratio_anomali
 
 
 def generate_data_wip(
-        n_samples: int,
-        ratio_anomalies: list,
-        n_features: int,
-        n_causalities: int,
-        anomalies: list,
-        distributions: list,
-        saving_path: str,
-        db_name: str,
-    ):
+    n_samples: int,
+    ratio_anomalies: list,
+    n_features: int,
+    n_causalities: int,
+    anomalies: list,
+    distributions: list,
+    saving_path: str,
+    db_name: str,
+):
 
     # Generate graphical model
     graphical_model, feature_generation_information = generate_graphical_model(
-        n_features, n_causalities, distributions=distributions, saving_path=saving_path
+        n_features,
+        n_causalities,
+        distributions=distributions,
+        saving_path=saving_path,
     )
-    anomalies_scheme = generate_anomalies_scheme(anomalies=anomalies, n_features=n_features)
+    anomalies_scheme = generate_anomalies_scheme(
+        anomalies=anomalies, n_features=n_features
+    )
     # Generate the data
     for seed in [0, 1, 2, 3, 4, 5]:
         version_db_name = db_name + f"_seed_{seed}"
         version_saving_path = os.path.join(saving_path, version_db_name)
         os.makedirs(version_saving_path, exist_ok=True)
         plot_graph(graphical_model, saving_path=version_saving_path)
-        with open(os.path.join(version_saving_path, "anomalies_scheme.yaml"), "w") as file:
+        with open(
+            os.path.join(version_saving_path, "anomalies_scheme.yaml"), "w"
+        ) as file:
             yaml.dump(anomalies_scheme, file)
             # Save the feature generation info in a yaml file
-        with open(os.path.join(saving_path, "feature_generation_info.yaml"), "w") as file:
+        with open(
+            os.path.join(saving_path, "feature_generation_info.yaml"), "w"
+        ) as file:
             yaml.dump(feature_generation_information, file)
         X, y, explanation = generate_dataset(
             graphical_model,
             anomalies_scheme,
             n_samples,
             ratio_anomalies,
-            seed=seed
-            )
+            seed=seed,
+        )
         data = {
             "X": np.array(X),
             "y": np.array(y),
             "explanation": np.array(explanation),
         }
-        with open(os.path.join(version_saving_path, "anomaly_information.yaml"), "w") as file:
+        with open(
+            os.path.join(version_saving_path, "anomaly_information.yaml"), "w"
+        ) as file:
             yaml.dump(anomalies_scheme, file)
-        pickle.dump(data, open(os.path.join(version_saving_path, "data.npy"), "wb"))
+        pickle.dump(
+            data, open(os.path.join(version_saving_path, "data.npy"), "wb")
+        )
         np.save(os.path.join(version_saving_path, "features.npy"), np.array(X))
         np.save(os.path.join(version_saving_path, "labels.npy"), np.array(y))
-        np.save(os.path.join(version_saving_path, "explanation.npy"), np.array(explanation))
+        np.save(
+            os.path.join(version_saving_path, "explanation.npy"),
+            np.array(explanation),
+        )
         # Generate yalm config file:
         config = {
             "data_type": "tabular",
             "dataset_name": version_db_name,
             "dataset_path": os.path.join(version_saving_path, "data.npy"),
-            "test_ratio": 0.2
+            "test_ratio": 0.2,
         }
         config_path = "conf/dataset"
-        with open(os.path.join(config_path, f"{version_db_name}.yaml"), "w") as file:
+        with open(
+            os.path.join(config_path, f"{version_db_name}.yaml"), "w"
+        ) as file:
             yaml.dump(config, file)
 
 
-@hydra.main(version_base=None, config_path="../../conf", config_name="config_datagen")
+@hydra.main(
+    version_base=None, config_path="../../conf", config_name="config_datagen"
+)
 def main(cfg: omegaconf.DictConfig):
     anomalies_ratio_str = "_".join(map(str, cfg.dataset.ratio_anomalies))
     db_name = (

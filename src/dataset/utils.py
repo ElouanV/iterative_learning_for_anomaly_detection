@@ -11,7 +11,7 @@ def split_list(indices, ratios):
     random.shuffle(indices)
 
     for size in split_sizes:
-        splits.append(indices[start: start + size])
+        splits.append(indices[start : start + size])
         start += size
 
     return splits

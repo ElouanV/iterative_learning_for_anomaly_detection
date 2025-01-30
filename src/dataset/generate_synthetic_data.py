@@ -11,7 +11,7 @@ import yaml
 from bidict import bidict
 from matplotlib import pyplot as plt
 
-from src.dataset.onutils import split_list
+from src.dataset.utils import split_list
 
 
 def generate_random_dag_with_edges(num_nodes: int, num_edges: int):
@@ -195,7 +195,10 @@ def add_anomalies(X, graphical_model, anomalies: list, ratio_anomalies: list):
 
 
 def generate_graphical_model(
-    n_features: int, number_of_causalities: int, distributions: list, saving_path: str
+    n_features: int,
+    number_of_causalities: int,
+    distributions: list,
+    saving_path: str,
 ):
     feature_distributions = random.choices(distributions, k=n_features)
     graphical_model = generate_random_dag_with_edges(
@@ -232,7 +235,9 @@ def generate_graphical_model(
         graphical_model.nodes[i]["fn"] = fn
         graphical_model.nodes[i]["distrib_params"] = distrib_params
     # Save the feature generation info in a yaml file
-    with open(os.path.join(saving_path, "feature_generation_info.yaml"), "w") as file:
+    with open(
+        os.path.join(saving_path, "feature_generation_info.yaml"), "w"
+    ) as file:
         yaml.dump(feature_generation_info, file)
     return graphical_model
 
@@ -250,7 +255,10 @@ def generate_synthetic_data(
     """ """
     os.makedirs(saving_path, exist_ok=True)
     graphical_model = generate_graphical_model(
-        n_features, n_causalities, distributions=distributions, saving_path=saving_path
+        n_features,
+        n_causalities,
+        distributions=distributions,
+        saving_path=saving_path,
     )
     X = run_graphical_model(graphical_model, n_samples)
     plot_graph(graphical_model, saving_path="test")
@@ -262,14 +270,14 @@ def generate_synthetic_data(
         "y": np.array(y),
         "explanation": np.array(explanation),
     }
-    with open(os.path.join(saving_path, "anomaly_information.yaml"), "w") as file:
+    with open(
+        os.path.join(saving_path, "anomaly_information.yaml"), "w"
+    ) as file:
         yaml.dump(anomaly_information, file)
     pickle.dump(data, open(os.path.join(saving_path, "data.npy"), "wb"))
     np.save(os.path.join(saving_path, "features.npy"), np.array(X))
     np.save(os.path.join(saving_path, "labels.npy"), np.array(y))
-    np.save(
-        os.path.join(saving_path, "explanation.npy"), np.array(explanation)
-    )
+    np.save(os.path.join(saving_path, "explanation.npy"), np.array(explanation))
     # Generate yalm config file:
     config = {
         "data_type": "tabular",
@@ -282,7 +290,9 @@ def generate_synthetic_data(
         yaml.dump(config, file)
 
 
-@hydra.main(version_base=None, config_path="../../conf", config_name="config_datagen")
+@hydra.main(
+    version_base=None, config_path="../../conf", config_name="config_datagen"
+)
 def main(cfg: omegaconf.DictConfig):
     # Generate 5 version of dataset from the same config
     for i in range(5):
@@ -292,7 +302,9 @@ def main(cfg: omegaconf.DictConfig):
             f"synthetic_f{cfg.dataset.n_features}_s{cfg.dataset.n_samples}_"
             f"c{cfg.dataset.n_causalities}_r{anomalies_ratio_str}_v{i}"
         )
-        os.makedirs(os.path.join(cfg.dataset.saving_path, db_name), exist_ok=True)
+        os.makedirs(
+            os.path.join(cfg.dataset.saving_path, db_name), exist_ok=True
+        )
         generate_synthetic_data(
             n_samples=cfg.dataset.n_samples,
             ratio_aomalies=cfg.dataset.ratio_anomalies,

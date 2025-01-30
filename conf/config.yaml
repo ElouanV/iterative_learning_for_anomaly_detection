@@ -5,16 +5,16 @@ device: 'auto'
 mode: 'benchmark' # 'benchmark' or 'debug'
 force_rerun: True
 
-realistic_synthetic_mode: ["global", "additive_noise", "multiplicative_noise", "local"]
+realistic_synthetic_mode:
 alpha: 5
 percentage: 0.1
-run_id: "adbench_synthetic_anomaly"
+run_id: "DDPM_seeds"
 
 
 defaults:
   - _self_
   - dataset: WBC
-  - model: 'DTECategorical'
+  - model: 'DDPM'
   - training_method: 'unsupervised'
   - override hydra/launcher: 'joblib'
 
@@ -24,6 +24,7 @@ hydra:
       n_jobs: 2
   sweeper: 
     params:
+      random_seed: 1,2
       # All datasets that start with A_synthetic
-      dataset:  glob(*,A_synthetic_f*)
+      dataset:  glob(*, A_synthetic*)
       training_method: unsupervised, iterative_dataset_sampling

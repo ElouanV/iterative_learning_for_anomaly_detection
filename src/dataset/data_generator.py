@@ -279,7 +279,9 @@ class DataGenerator:
                 # if len(np.unique(data["y"])) > 2:
                 #     data["y"][data["y"] > 0] = 1
             else:
-                raise NotImplementedError(f"Dataset {self.dataset} is not supported!")
+                raise NotImplementedError(
+                    f"Dataset {self.dataset} is not supported!"
+                )
             X = data["X"]
             y = data["y"]
             if "explanation" in data.keys():
@@ -467,4 +469,3 @@ class DataGenerator:
             "explanation_train": explanation_train,
             "explanation_test": explanation_test,
         }
-

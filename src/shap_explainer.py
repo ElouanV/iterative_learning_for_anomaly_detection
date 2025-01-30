@@ -1,11 +1,8 @@
 import logging
-import os
 
 import numpy as np
 import shap
 import torch
-
-from src.viz.training_viz import plot_feature_importance
 
 
 class ShapExplainer:
@@ -19,7 +16,7 @@ class ShapExplainer:
         self.explainer = shap.KernelExplainer(f, data)
         self.logger = logging.getLogger(__name__)
 
-    def explain_instance(self, x):
+    def explain_instance(self, x, nsamples="auto"):
         explanations = []
         if len(x.shape) == 1:
             x = x.reshape(1, -1)
@@ -27,7 +24,7 @@ class ShapExplainer:
             x = x.cpu().detach().numpy()
         self.logger.info("Shap explainer running")
         shap_values = self.explainer.shap_values(
-            x, check_additivity=False, nsamples="auto", silent=True
+            x, check_additivity=False, nsamples=nsamples, silent=True
         )
         self.logger.info("Shap explainer done")
         explanations.append(shap_values)

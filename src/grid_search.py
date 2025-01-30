@@ -81,30 +81,6 @@ def run_config(cfg, logger, device):
         exp_name=experiment_name,
         saving_path=saving_path,
     )
-    if len(np.unique(data["y_test"])) > 2:
-        # TODO! refactor this code
-        detection_rate = []
-        for i in np.unique(data["y_test"])[1:]:
-            i_anomaly_indices = data["y_test"] == i
-            detection_rate.append(
-                np.sum(y_pred[i_anomaly_indices])
-                / np.sum(i_anomaly_indices)
-                * 100
-            )
-            logger.info(
-                f"Detection rate for class {i}: {detection_rate[-1]}, number of "
-                f"samples: {np.sum(i_anomaly_indices)}, detected samples: {np.sum(y_pred[i_anomaly_indices])}"
-            )
-        # Clear the plot
-        plt.clf()
-        plt.bar(np.unique(data["y_test"])[1:], detection_rate)
-        # Display count on top of the bar
-        plt.xticks(np.unique(data["y_test"]))
-        plt.ylabel("Detection rate")
-        plt.title(f"Detection rate per class, {experiment_name}")
-        plt.grid()
-        plt.savefig(Path(saving_path, "detection_rate_per_class.png"))
-        plt.show()
 
     logger.info(f"F1 score: {f1_score}")
 
