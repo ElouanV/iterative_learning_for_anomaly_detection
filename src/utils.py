@@ -4,7 +4,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from src.dataset.adbench_synthetic_anomalies import DataGenerator
+from src.dataset.data_generator import DataGenerator
 from src.models.ddpm import DDPM
 from src.models.dte import DTECategorical, DTEInverseGamma
 # from src.models.vision import DTECategorical as DTECVision
@@ -109,7 +109,6 @@ def get_dataset(cfg: Path):
     data = datagenerator.generator(
         la=0,
         max_size=50000,
-        synthetic_anomalies=cfg.realistic_synthetic_mode,
         alpha=cfg.alpha,
         percentage=cfg.percentage,
     )  # maximum of 50,000 data points are available

@@ -10,5 +10,5 @@ model_parameters:
 
 training:
   epochs: 400
-  batch_size: 16
+  batch_size: 64
   learning_rate: 1e-4

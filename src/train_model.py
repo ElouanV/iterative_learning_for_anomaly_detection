@@ -185,7 +185,11 @@ def main(cfg: omegaconf.DictConfig):
     device = check_cuda(logger, cfg.device)
     if cfg.mode == "benchmark":
         if cfg.training_method.name == "DSIL":
+<<<<<<< HEAD
             for ratio in [0.5, "cosine", "exponential"]:
+=======
+            for ratio in [0.5]:
+>>>>>>> 924f15f44a30f23e8f7bcbaeb04f9a2fe64116ed
                 cfg.training_method.ratio = ratio
                 for sampling_method in ["deterministic"]:
                     cfg.training_method.sampling_method = sampling_method

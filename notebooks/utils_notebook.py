@@ -58,10 +58,6 @@ def dataframe_to_latex(
 ):
     if column_format is None:
         column_format = "l" * (len(df.columns) + (1 if index else 0))
-    # Replace _ by ' ' in column names and values
-    df.columns = df.columns.str.replace("_", " ")
-    # Replace _ by ' ' in values
-    df = df.applymap(lambda x: str(x).replace("_", " "))
     # For float columns, round to 2 decimal places
     for col in df.select_dtypes(include=[np.float64, np.float32]).columns:
         df[col] = df[col].round(2)

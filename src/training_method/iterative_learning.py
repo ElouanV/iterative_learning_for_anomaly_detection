@@ -84,6 +84,11 @@ class SamplingIterativeLearning:
                 f1 = f1_score(y_eval, y_pred)
                 self.logger.info(f"F1 score at iteration {iteration}: {f1}")
                 roc = roc_auc_score(y_eval, y_pred)
+                # Save predictions
+                np.save(
+                    os.path.join(self.saving_path, f"predictions_{iteration}.npy"),
+                    y_pred,
+                )
                 self.logger.info(
                     f"ROC AUC score at iteration {iteration}: {roc}"
                 )

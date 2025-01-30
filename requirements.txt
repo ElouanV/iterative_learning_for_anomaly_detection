@@ -8,5 +8,10 @@ shap
 pyod
 hydra-core
 omegaconf
+black
+flake8
 adbench
 tqdm
+isort
+hydra-joblib-launcher
+bidict

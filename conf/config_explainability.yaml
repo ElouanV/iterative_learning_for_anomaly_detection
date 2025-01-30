@@ -8,7 +8,7 @@ force_rerun: True
 realistic_synthetic_mode: null
 alpha: 5
 percentage: 0.1
-run_id: "all_db_all_training"
+run_id: "adbench_synthetic_anomaly"
 
 
 defaults:

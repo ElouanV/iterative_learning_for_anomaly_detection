@@ -242,10 +242,6 @@ def run_config(cfg, logger, device):
 def main(cfg: omegaconf.DictConfig):
     logger = logging.getLogger(__name__)
     device = check_cuda(logger, cfg.device)
-    if cfg.dataset.data_type != "tabular":
-        raise NotImplementedError(
-            f"Data type {cfg.dataset.data_type} not implemented yet"
-        )
     if cfg.mode == "benchmark":
         if cfg.training_method.name == "DSIL":
             for ratio in [0.5, "cosine", "exponential"]:

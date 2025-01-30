@@ -5,7 +5,7 @@ device: 'auto'
 mode: 'benchmark' # 'benchmark' or 'debug'
 
 
-realistic_synthetic_mode: null
+realistic_synthetic_mode: ["global", "additive_noise", "multiplicative_noise", "local"]
 alpha: 5
 percentage: 0.1
 run_id: "datagen"
@@ -13,18 +13,13 @@ run_id: "datagen"
 
 defaults:
   - _self_
-  - dataset: 'synthetic_generation' 
-  - model: 'DTECategorical'
-  - training_method: 'iterative_dataset_sampling'
-  - dataset_path: ???
-  # - override hydra/launcher: 'joblib'
+  - dataset: wine
+  - override hydra/launcher: 'joblib'
 
 
 hydra:
-  # launcher:
-  #   n_jobs: 4
+  launcher:
+    n_jobs: 4
   sweeper: 
     params:
-      # glob(*) allows to select all datasets
-      training_method: unsupervised, iterative_dataset_sampling
-      # random_seed: 0,1,2,3
+      dataset: glob(*, *synthetic*)
