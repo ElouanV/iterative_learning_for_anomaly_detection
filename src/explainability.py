@@ -22,16 +22,10 @@ def explanation(
         shap_explainer = ShapExplainer(model, data["X_train"])
         explanation = shap_explainer.explain_instance(
             samples,
-            expected_explanation=expected_explanation,
-            saving_path=saving_path,
-            experiment_name=exp_name,
         ).squeeze()
     elif method == "grad":
         explanation = model.gradient_explanation(
             samples,
-            expected_explanation=expected_explanation,
-            saving_path=saving_path,
-            exp_name=exp_name,
         )
     elif method == "mean_diffusion_perturbation":
         explanation = model.instance_explanation(
@@ -143,8 +137,8 @@ def run_config(cfg, logger, device):
             logger.info(
                 f"Max diffusion feature importance NDCG: {max_diffusion_nDCG.mean()}"
             )
-            metric_df["max_diffusion_accuracy"] = max_diffusion_nDCG
-            metric_df["max_diffusion_ndcg"] = max_diffusion_accuracy
+            metric_df["max_diffusion_accuracy"] = max_diffusion_accuracy
+            metric_df["max_diffusion_ndcg"] = max_diffusion_nDCG
             metric_df["max_diffusion_time"] = max_diffusion_explanation_time
         if "shap_explanation_accuracy" not in existing_columns or force_rerun:
             (
@@ -245,10 +239,6 @@ def run_config(cfg, logger, device):
 def main(cfg: omegaconf.DictConfig):
     logger = logging.getLogger(__name__)
     device = check_cuda(logger, cfg.device)
-    if cfg.dataset.data_type != "tabular":
-        raise NotImplementedError(
-            f"Data type {cfg.dataset.data_type} not implemented yet"
-        )
     if cfg.mode == "benchmark":
         if cfg.training_method.name == "DSIL":
             for ratio in [0.5, "cosine", "exponential"]:

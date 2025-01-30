@@ -1,4 +1,4 @@
 data_path: data_adbench/51_MVTec-AD.npz
 data_type: image
-dataset_name: 51_MVTec-AD
+dataset_name: MVTec-AD_wood
 test_ratio: 0.2

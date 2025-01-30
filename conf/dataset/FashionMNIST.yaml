@@ -1,4 +1,4 @@
 data_path: data_adbench/49_FashionMNIST_0.npz
 data_type: image
-dataset_name: 49_FashionMNIST_0
+dataset_name: FashionMNIST_0
 test_ratio: 0.2

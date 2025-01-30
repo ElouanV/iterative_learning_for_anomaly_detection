@@ -11,6 +11,8 @@ import os
 import random
 from math import ceil
 
+import yaml
+
 import hydra
 import numpy as np
 import omegaconf
@@ -20,7 +22,7 @@ from bidict import bidict
 from sklearn.mixture import GaussianMixture
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
-
+import pickle
 from src.dataset.generate_synthetic_data_bis import generate_anomalies_scheme
 
 # Path to adbench datasets
@@ -90,6 +92,7 @@ class DataGenerator:
         y_anomalies = []
         explanation = []
         anomaly_code = bidict(anomaly_code)
+        anomalies_info = {}
         for anomaly in anomalies_scheme.keys():
             anomalies_info = anomalies_scheme[anomaly]
             if anomaly == "cluster":
@@ -100,6 +103,7 @@ class DataGenerator:
                 X_anomalies.append(anomalies)
                 y_anomalies.append(np.full(anomalies_nb[anomaly], anomaly_code[anomaly]))
                 explanation.append(np.one(anomalies.shape))
+                anomalies_info[anomaly] = {"alpha": alpha, "features": "all"}
             elif anomaly == "global":
                 selected_features = anomalies_info["features"]
                 alpha = anomalies_info["alpha"]
@@ -114,6 +118,10 @@ class DataGenerator:
                 exp = np.zeros(anomalies.shape)
                 exp[:, selected_features] = 1
                 explanation.append(exp)
+                anomalies_info[anomaly] = {
+                "alpha": alpha,
+                "features": selected_features
+                }
             elif anomaly == "local":
                 selected_features = anomalies_info["features"]
                 alpha = anomalies_info["alpha"]
@@ -130,6 +138,10 @@ class DataGenerator:
                 exp = np.zeros(anomalies.shape)
                 exp[:, selected_features] = 1
                 explanation.append(exp)
+                anomalies_info[anomaly] = {
+                    "alpha": alpha,
+                    "features": selected_features,
+                }
             elif anomaly == "additive_noise":
                 selected_features = anomalies_info["features"]
                 alpha = anomalies_info["alpha"]
@@ -145,6 +157,10 @@ class DataGenerator:
                 exp = np.zeros(anomalies.shape)
                 exp[:, selected_features] = 1
                 explanation.append(exp)
+                anomalies_info[anomaly] = {
+                    "features": selected_features,
+                    "alpha": alpha,
+                }
             elif anomaly == "multiplicative_noise":
                 selected_features = anomalies_info["features"]
                 alpha = anomalies_info["alpha"]
@@ -161,9 +177,13 @@ class DataGenerator:
                 exp = np.zeros(anomalies.shape)
                 exp[:, selected_features] = 1
                 explanation.append(exp)
+                anomalies_info[anomaly] = {
+                    "features": selected_features,
+                    "alpha": alpha,
+                }
             else:
                 raise ValueError("Anomaly type not recognized")
-        return X_anomalies, y_anomalies, explanation
+        return X_anomalies, y_anomalies, explanation, anomalies_info
 
     def add_duplicated_anomalies(self, X, y, duplicate_times: int):
         if duplicate_times <= 1:
@@ -233,7 +253,7 @@ class DataGenerator:
 
         # Anomaly generation
         anomalies_nb = {k: nb_anomalies[i] for i, k in enumerate(anomalies)}
-        X_synthetic_anomalies, y_anomalies, explanation_anomalies = \
+        X_synthetic_anomalies, y_anomalies, explanation_anomalies, anomalies_info = \
             self.add_anomalies(X_normal=X_synthetic_normal,
                                graphical_model=gm,
                                anomalies_scheme=anomaly_scheme,
@@ -247,7 +267,7 @@ class DataGenerator:
         )
         explanation = np.concatenate((np.zeros(X_synthetic_normal.shape), *explanation_anomalies), axis=0)
 
-        return X, y, explanation
+        return X, y, explanation, anomalies_info
 
     def generator(
         self,
@@ -331,9 +351,10 @@ class DataGenerator:
             y = y[idx_sample]
             explanation = explanation[idx_sample]
 
+        anomalies_info = None
         if synthetic_anomalies is not None:
             # we save the generated dependency anomalies, since the Vine Copula could spend too long for generation
-            X, y, explanation = self.generate_realistic_synthetic(
+            X, y, explanation, anomalies_info = self.generate_realistic_synthetic(
                 X,
                 y,
                 anomalies=synthetic_anomalies,
@@ -444,17 +465,13 @@ class DataGenerator:
         y_train[idx_labeled_anomaly] = 1
 
         return {
-            "X_train": X_train,
-            "y_train": y_train,
-            "X_test": X_test,
-            "y_test": y_test,
-            "explanation_train": explanation_train,
-            "explanation_test": explanation_test,
-        }
+            "X": X,
+            "y": y,
+            "explanation": explanation,
+        }, anomalies_info
 
 
-@hydra.main(version_base=None, config_path="../../conf", config_name="config")
-def main(cfg: omegaconf.DictConfig):
+def generate_and_save_synthethic_data(cfg, saving_path, db_name):
     if cfg.training_method.name == "semi-supervised":
         datagenerator = DataGenerator(
             seed=cfg.random_seed, test_size=0.5, normal=True, config=cfg
@@ -465,14 +482,44 @@ def main(cfg: omegaconf.DictConfig):
         )  # data generator
 
     datagenerator.dataset = cfg.dataset.dataset_name  # specify the dataset name
-    data = datagenerator.generator(
+    data, anomaly_information = datagenerator.generator(
         la=0,
         max_size=50000,
+        synthetic_anomalies=cfg.realistic_synthetic_mode,
         alpha=cfg.alpha,
         percentage=cfg.percentage,
-        synthetic_anomalies=['cluster', 'global', 'local', 'additive_noise', 'multiplicative_noise']
     )  # maximum of 50,000 data points are available
-    return data
+    X = data['X']
+    y = data['y']
+    explanation = ['explanation']
+    print(saving_path, db_name)
+    with open(os.path.join(saving_path, "anomaly_information.yaml"), "w") as file:
+        yaml.dump(anomaly_information, file)
+    pickle.dump(data, open(os.path.join(saving_path, "data.npy"), "wb"))
+    np.save(os.path.join(saving_path, "features.npy"), np.array(X))
+    np.save(os.path.join(saving_path, "labels.npy"), np.array(y))
+    np.save(
+        os.path.join(saving_path, "explanation.npy"), np.array(explanation)
+    )
+    # Generate yalm config file:
+    config = {
+        "data_type": cfg.dataset.data_type,
+        "dataset_name": db_name,
+        "dataset_path": os.path.join(saving_path, "data.npy"),
+        "test_ratio": 0.2,
+    }
+    config_path = "conf/dataset"
+    with open(os.path.join(config_path, f"{db_name}.yaml"), "w") as file:
+        yaml.dump(config, file)
+
+@hydra.main(version_base=None, config_path="../../conf", config_name="config_datagen")
+def main(cfg: omegaconf.DictConfig):
+    db_name = (
+        f"ADBench_synthetic_{cfg.dataset.dataset_name}"
+    )
+    saving_path = cfg.output_path + "/ADBench_synthetic/"+ db_name
+    os.makedirs(saving_path, exist_ok=True)
+    generate_and_save_synthethic_data(cfg, saving_path, db_name)
 
 
 if __name__ == "__main__":

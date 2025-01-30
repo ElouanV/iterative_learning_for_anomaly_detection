@@ -1,4 +1,4 @@
 data_path: data_adbench/48_CIFAR10.npz
 data_type: image
-dataset_name: 48_CIFAR10
+dataset_name: CIFAR10_0
 test_ratio: 0.2
