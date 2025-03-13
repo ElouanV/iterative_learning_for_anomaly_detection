@@ -7,6 +7,7 @@ import torch
 from src.dataset.data_generator import DataGenerator
 from src.models.ddpm import DDPM
 from src.models.dte import DTECategorical, DTEInverseGamma
+# from src.models.vision import DTECategorical as DTECVision
 
 
 def select_model(model_config: dict, device):
@@ -44,7 +45,6 @@ def select_model(model_config: dict, device):
             device=device,
             T=model_config.model_parameters.T,
         )
-
 
 
 def count_ano(indices, y):
@@ -116,6 +116,30 @@ def get_dataset(cfg: Path):
 
 
 def setup_experiment(cfg: dict):
+    """
+    Sets up the experiment by generating the experiment name and creating the necessary directories.
+    Args:
+        cfg (dict): Configuration dictionary containing the following keys:
+            - model (object): An object with attributes:
+                - model_name (str): Name of the model.
+                - model_parameters (object): An object with attributes:
+                    - T (int): Temperature parameter for the model (if applicable).
+                    - num_bins (int): Number of bins for the model (if applicable).
+            - training_method (object): An object with attributes:
+                - name (str): Name of the training method.
+                - sampling_method (str): Sampling method used in training.
+                - ratio (float): Ratio parameter for the training method (if applicable).
+            - random_seed (int): Random seed for reproducibility.
+            - output_path (str): Base path for saving experiment outputs.
+            - run_id (int): Unique identifier for the current run.
+            - dataset (object): An object with attributes:
+                - dataset_name (str): Name of the dataset.
+            - realistic_synthetic_mode (list): List of modes for realistic synthetic data (if applicable).
+    Returns:
+        tuple: A tuple containing:
+            - saving_path (Path): The path where experiment outputs will be saved.
+            - experiment_name (str): The generated name of the experiment.
+    """
     experiment_name = (
         f"{cfg.model.model_name}_{cfg.training_method.name}_{cfg.training_method.sampling_method}"
         + (
@@ -148,6 +172,9 @@ def setup_experiment(cfg: dict):
 
 
 def check_cuda(logger, device=None):
+    """
+    Check if CUDA is available and set the device accordingly.
+    """
     if torch.cuda.is_available():
         print(f"Cuda version: {torch.version.cuda}")
     else:

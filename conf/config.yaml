@@ -5,17 +5,16 @@ device: 'auto'
 mode: 'benchmark' # 'benchmark' or 'debug'
 force_rerun: True
 
-# realistic_synthetic_mode: ["global", "additive_noise", "multiplicative_noise", "local"]
-realistic_synthetic_mode: null
+realistic_synthetic_mode:
 alpha: 5
 percentage: 0.1
-run_id: "pushing_iteration"
+run_id: "DDPM_seeds"
 
 
 defaults:
   - _self_
   - dataset: WBC
-  - model: 'DTECategorical'
+  - model: 'DDPM'
   - training_method: 'unsupervised'
   - override hydra/launcher: 'joblib'
 
@@ -25,8 +24,7 @@ hydra:
       n_jobs: 2
   sweeper: 
     params:
-      random_seed: 0,1,2
+      random_seed: 1,2
       # All datasets that start with A_synthetic
-      # dataset: ADBench_synthetic_39_vertebral, ADBench_synthetic_44_Wilt, ADBench_synthetic_42_WBC, ADBench_synthetic_27_PageBlocks, ADBench_synthetic_19_landsat, ADBench_synthetic_5_campaign
-      dataset: CIFAR10, FashionMNIST, MVTec-AD, SVHN
+      dataset:  glob(*, A_synthetic*)
       training_method: unsupervised, iterative_dataset_sampling

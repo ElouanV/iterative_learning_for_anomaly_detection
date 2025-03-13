@@ -29,6 +29,9 @@ def train_model(
     saving_path: Path = None,
     exp_name: str = None,
 ):
+    """
+    Train the model according to the configuration, selecting different training methods
+    """
     train_log = {}
     if cfg.training_method.name == "unsupervised":
         model, train_losses = model.fit(X_train, cfg.model)
@@ -77,9 +80,12 @@ def run_config(cfg, logger, device):
             {cfg.random_seed}"
     )
 
-    # if Path(saving_path, "model_metrics.csv").exists() and Path(saving_path, "model.pth").exists():
-    #     logger.info("Experiment already done, skipping")
-    #     return
+    if (
+        Path(saving_path, "model_metrics.csv").exists()
+        and Path(saving_path, "model.pth").exists()
+    ):
+        logger.info("Experiment already done, skipping")
+        return
     model = select_model(cfg.model, device=device)
 
     # training, for unsupervised models the y label will be discarded
@@ -176,7 +182,11 @@ def main(cfg: omegaconf.DictConfig):
     device = check_cuda(logger, cfg.device)
     if cfg.mode == "benchmark":
         if cfg.training_method.name == "DSIL":
+<<<<<<< HEAD
+            for ratio in [0.5, "cosine", "exponential"]:
+=======
             for ratio in [0.5]:
+>>>>>>> 924f15f44a30f23e8f7bcbaeb04f9a2fe64116ed
                 cfg.training_method.ratio = ratio
                 for sampling_method in ["deterministic"]:
                     cfg.training_method.sampling_method = sampling_method

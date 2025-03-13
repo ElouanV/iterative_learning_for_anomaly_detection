@@ -1,10 +1,9 @@
 """
 File from ADBench https://github.com/Minqi824/ADBench.git
-that was modified to integrate the new semi-supervised setting
-and add more flexibility.
-Copyright (c) 2022, Mickey (Minqi)
+that was modified to integrate the new synthetic anomaly generation
 All rights reserved.
 """
+
 import copy
 import logging
 import os
@@ -79,7 +78,13 @@ class DataGenerator:
         self.utils = Utils()
         self.logger = logging.getLogger(__name__)
 
-    def add_anomalies(self, X_normal, graphical_model, anomalies_scheme: dict, anomalies_nb: dict):
+    def add_anomalies(
+        self,
+        X_normal,
+        graphical_model,
+        anomalies_scheme: dict,
+        anomalies_nb: dict,
+    ):
         # Use bidict to store the type of anomaly and an int
         anomaly_code = {
             "cluster": 1,
@@ -97,10 +102,16 @@ class DataGenerator:
             if anomaly == "cluster":
                 alpha = anomalies_info["alpha"]
                 modified_graphical_model = copy.deepcopy(graphical_model)
-                modified_graphical_model.means_ = alpha * modified_graphical_model.means_
-                anomalies = modified_graphical_model.sample(anomalies_nb[anomaly])
+                modified_graphical_model.means_ = (
+                    alpha * modified_graphical_model.means_
+                )
+                anomalies = modified_graphical_model.sample(
+                    anomalies_nb[anomaly]
+                )
                 X_anomalies.append(anomalies)
-                y_anomalies.append(np.full(anomalies_nb[anomaly], anomaly_code[anomaly]))
+                y_anomalies.append(
+                    np.full(anomalies_nb[anomaly], anomaly_code[anomaly])
+                )
                 explanation.append(np.one(anomalies.shape))
                 anomalies_info["features": "all"]
             elif anomaly == "global":
@@ -110,14 +121,17 @@ class DataGenerator:
                 for i in selected_features:
                     low = np.min(X_normal[:, i]) * (alpha)
                     high = np.max(X_normal[:, i]) * (alpha)
-                    anomalies[:, i] = np.random.uniform(low, high, anomalies_nb[anomaly])
+                    anomalies[:, i] = np.random.uniform(
+                        low, high, anomalies_nb[anomaly]
+                    )
                 X_anomalies.append(anomalies)
-                y_anomalies.append(np.full(anomalies_nb[anomaly], anomaly_code[anomaly]))
+                y_anomalies.append(
+                    np.full(anomalies_nb[anomaly], anomaly_code[anomaly])
+                )
 
                 exp = np.zeros(anomalies.shape)
                 exp[:, selected_features] = 1
                 explanation.append(exp)
-
             elif anomaly == "local":
                 selected_features = anomalies_info["features"]
                 alpha = anomalies_info["alpha"]
@@ -130,7 +144,9 @@ class DataGenerator:
                 # Generate the anomalies
                 anomalies = gm_copy.sample(anomalies_nb[anomaly])[0]
                 X_anomalies.append(anomalies)
-                y_anomalies.append(np.full(anomalies_nb[anomaly], anomaly_code[anomaly]))
+                y_anomalies.append(
+                    np.full(anomalies_nb[anomaly], anomaly_code[anomaly])
+                )
                 exp = np.zeros(anomalies.shape)
                 exp[:, selected_features] = 1
                 explanation.append(exp)
@@ -146,7 +162,9 @@ class DataGenerator:
                 )
                 anomalies[:, selected_features] += noise
                 X_anomalies.append(anomalies)
-                y_anomalies.append(np.full(anomalies_nb[anomaly], anomaly_code[anomaly]))
+                y_anomalies.append(
+                    np.full(anomalies_nb[anomaly], anomaly_code[anomaly])
+                )
                 exp = np.zeros(anomalies.shape)
                 exp[:, selected_features] = 1
                 explanation.append(exp)
@@ -163,7 +181,9 @@ class DataGenerator:
                 )
                 anomalies[:, selected_features] *= noise
                 X_anomalies.append(anomalies)
-                y_anomalies.append(np.full(anomalies_nb[anomaly], anomaly_code[anomaly]))
+                y_anomalies.append(
+                    np.full(anomalies_nb[anomaly], anomaly_code[anomaly])
+                )
                 exp = np.zeros(anomalies.shape)
                 exp[:, selected_features] = 1
                 explanation.append(exp)
@@ -189,9 +209,7 @@ class DataGenerator:
 
         return X, y
 
-    def generate_realistic_synthetic(
-        self, X, y, anomalies: list
-    ):
+    def generate_realistic_synthetic(self, X, y, anomalies: list):
         """
         Currently, four types of realistic synthetic outliers can be generated:
         1. local outliers: where normal data follows the GMM distribuion, and anomalies follow the GMM
@@ -239,11 +257,13 @@ class DataGenerator:
 
         # Anomaly generation
         anomalies_nb = {k: nb_anomalies[i] for i, k in enumerate(anomalies)}
-        X_synthetic_anomalies, y_anomalies, explanation_anomalies, anomalies_info = \
-            self.add_anomalies(X_normal=X_synthetic_normal,
-                               graphical_model=gm,
-                               anomalies_scheme=anomaly_scheme,
-                               anomalies_nb=anomalies_nb
+        X_synthetic_anomalies, y_anomalies, explanation_anomalies = (
+            self.add_anomalies(
+                X_normal=X_synthetic_normal,
+                graphical_model=gm,
+                anomalies_scheme=anomaly_scheme,
+                anomalies_nb=anomalies_nb,
+            )
         )
 
         X = np.concatenate((X_synthetic_normal, *X_synthetic_anomalies), axis=0)
@@ -251,7 +271,9 @@ class DataGenerator:
             np.repeat(0, X_synthetic_normal.shape[0]),
             y_anomalies,
         )
-        explanation = np.concatenate((np.zeros(X_synthetic_normal.shape), *explanation_anomalies), axis=0)
+        explanation = np.concatenate(
+            (np.zeros(X_synthetic_normal.shape), *explanation_anomalies), axis=0
+        )
 
         return X, y, explanation, anomaly_scheme
 
@@ -307,7 +329,9 @@ class DataGenerator:
                     self.config.dataset.dataset_path, allow_pickle=True
                 )
             else:
-                raise NotImplementedError(f"Dataset {self.dataset} is not supported!")
+                raise NotImplementedError(
+                    f"Dataset {self.dataset} is not supported!"
+                )
             X = data["X"]
             y = data["y"]
             if "explanation" in data.keys():
@@ -317,7 +341,9 @@ class DataGenerator:
 
         # if the dataset is too small, generating duplicate smaples up to n_samples_threshold
         if len(y) < self.n_samples_threshold and self.generate_duplicates:
-            self.logger.info(f"generating duplicate samples for dataset {self.dataset}...")
+            self.logger.info(
+                f"generating duplicate samples for dataset {self.dataset}..."
+            )
             self.utils.set_seed(self.seed)
             idx_duplicate = np.random.choice(
                 np.arange(len(y)), self.n_samples_threshold, replace=True
@@ -470,6 +496,13 @@ def generate_and_save_synthethic_data(cfg, saving_path, db_name):
         synthetic_anomalies=cfg.realistic_synthetic_mode,
         alpha=cfg.alpha,
         percentage=cfg.percentage,
+        synthetic_anomalies=[
+            "cluster",
+            "global",
+            "local",
+            "additive_noise",
+            "multiplicative_noise",
+        ],
     )  # maximum of 50,000 data points are available
     X = data['X']
     y = data['y']
@@ -493,6 +526,7 @@ def generate_and_save_synthethic_data(cfg, saving_path, db_name):
     config_path = "conf/dataset"
     with open(os.path.join(config_path, f"{db_name}.yaml"), "w") as file:
         yaml.dump(config, file)
+
 
 @hydra.main(version_base=None, config_path="../../conf", config_name="config_datagen")
 def main(cfg: omegaconf.DictConfig):

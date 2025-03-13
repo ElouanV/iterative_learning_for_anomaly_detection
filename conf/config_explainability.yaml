@@ -13,8 +13,8 @@ run_id: "adbench_synthetic_anomaly"
 
 defaults:
   - _self_
-  - dataset: A_synthetic_f4_s5000_c2_r0.025_0.025_seed_0
-  - model: 'DTECategorical'
+  - dataset: wine
+  - model: 'DDPM'
   - training_method: 'iterative_dataset_sampling'
   - override hydra/launcher: 'joblib'
 
@@ -25,5 +25,5 @@ hydra:
   sweeper: 
     params:
       # All datasets that start with A_synthetic
-      dataset:  glob(ADBench_synthetic*)
-      training_method: unsupervised, iterative_dataset_sampling
+      dataset:  glob(A_synthetic*)
+      training_method: iterative_dataset_sampling
