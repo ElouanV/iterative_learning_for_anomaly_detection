@@ -10,12 +10,12 @@ import sklearn.metrics as skm
 from adbench.myutils import Utils
 from matplotlib import pyplot as plt
 
-from training_method.iterative_learning import SamplingIterativeLearning
-from training_method.weighted_loss_iterative_learning import \
+from src.training_method.iterative_learning import SamplingIterativeLearning
+from src.training_method.weighted_loss_iterative_learning import \
     WeightedLossIterativeLearning
-from utils import (check_cuda, get_dataset, low_density_anomalies,
+from src.utils import (check_cuda, get_dataset, low_density_anomalies,
                    select_model, setup_experiment)
-from viz.training_viz import (plot_anomaly_score_distribution,
+from src.viz.training_viz import (plot_anomaly_score_distribution,
                               plot_anomaly_score_distribution_split, plot_tsne)
 
 
@@ -51,14 +51,12 @@ def train_model(
             max_iter=cfg.training_method.max_iter,
         )
     elif cfg.training_method.name == "weighted_loss":
-        iterative_learning = WeightedLossIterativeLearning(cfg)
+        iterative_learning = WeightedLossIterativeLearning(cfg=cfg, model=model, device=None)
         model, train_log = iterative_learning.train(
-            X_train,
-            y_train,
-            X_eval,
-            y_eval,
-            model,
-            cfg.iterative_learning.max_iter,
+            X_train=X_train,
+            y_train=y_train,
+            X_eval=X_eval,
+            y_eval=y_eval,
         )
     else:
         raise ValueError(f"Unknown training method: {cfg.training_method.name}")
@@ -114,13 +112,12 @@ def run_config(cfg, logger, device):
     # Suppose we know how much anomaly are in the dataset
     y_pred = low_density_anomalies(-score, len(indices[y_test_anomaly == 1]))
     f1_score = skm.f1_score(y_test_anomaly, y_pred)
-    plot_tsne(
-        data,
-        y_test_anomaly,
-        y_pred,
-        exp_name=experiment_name,
-        saving_path=saving_path,
-    )
+    # plot_tsne(
+    #     data,
+    #     y_test_anomaly,
+    #     y_pred,a
+    #     saving_path=saving_path,
+    # )
     threshold = np.percentile(score, y_test_anomaly.mean() * 100)
     plot_anomaly_score_distribution(
         score, saving_path, exp_name=experiment_name, threshold=threshold

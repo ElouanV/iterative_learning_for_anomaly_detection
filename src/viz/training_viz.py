@@ -91,49 +91,6 @@ def plot_f1_and_loss(
     plt.show()
 
 
-def plot_tsne(data, y_test_anomaly, p, exp_name, saving_path):
-    from sklearn.manifold import TSNE
-
-    tsne = TSNE(n_components=2, random_state=0)
-    X_embedded = tsne.fit_transform(data["X_test"])
-    plt.figure(figsize=(10, 10))
-    plt.scatter(
-        X_embedded[y_test_anomaly == 0, 0],
-        X_embedded[y_test_anomaly == 0, 1],
-        c="b",
-        label="0",
-    )
-    plt.scatter(
-        X_embedded[y_test_anomaly == 1, 0],
-        X_embedded[y_test_anomaly == 1, 1],
-        c="r",
-        label="1",
-    )
-    indices_of_well_detected_anomalies = np.where(
-        (p == 1) & (y_test_anomaly == 1)
-    )
-    indices_of_badly_detected_anomalies = np.where(
-        (p == 1) & (y_test_anomaly == 0)
-    )
-    plt.scatter(
-        X_embedded[indices_of_well_detected_anomalies, 0],
-        X_embedded[indices_of_well_detected_anomalies, 1],
-        c="g",
-        label="detected",
-    )
-    plt.scatter(
-        X_embedded[indices_of_badly_detected_anomalies, 0],
-        X_embedded[indices_of_badly_detected_anomalies, 1],
-        c="y",
-        label="false positive",
-    )
-    plt.legend()
-    plt.ylabel("t-SNE 2")
-    plt.xlabel("t-SNE 1")
-    plt.title(f"TSNE plot of the test set, exp: {exp_name}")
-    plt.savefig(Path(saving_path, "tsne.png"))
-    plt.show()
-
 
 def plot_anomaly_score_distribution(
     scores, saving_path, exp_name, threshold=None
@@ -334,4 +291,32 @@ def iterative_training_score_evolution(iteration_scores, exp_name, saving_path):
     plt.savefig(
         os.path.join(saving_path, "iterative_training_score_evolution.png")
     )
+    plt.show()
+
+
+def plot_tsne(tsne_model, X, y, iteration, saving_path, indices_to_keep):
+    X_embedded = tsne_model.fit_transform(X)
+    plt.figure(figsize=(10, 10))
+    keep_mask = np.full(X.shape[0], 0)
+    keep_mask[indices_to_keep] = 1
+    for anomaly_type in np.unique(y):
+        mask = y == anomaly_type
+        mask_keep = mask & keep_mask
+        plt.scatter(
+            X_embedded[mask_keep, 0],
+            X_embedded[mask_keep, 1],
+            label=f"Anomaly type {anomaly_type}",
+            alpha=1,
+        )
+        mask_not_keep = mask & ~keep_mask
+        plt.scatter(
+            X_embedded[mask_not_keep, 0],
+            X_embedded[mask_not_keep, 1],
+            label=f"Anomaly type {anomaly_type}",
+            alpha=0.2,
+        )
+    plt.legend()
+    plt.title(f"t-SNE visualization at iteration {iteration}")
+    plt.grid()
+    plt.savefig(os.path.join(saving_path, f"tsne_iteration_{iteration}.png"))
     plt.show()

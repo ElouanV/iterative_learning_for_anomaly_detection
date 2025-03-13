@@ -18,4 +18,7 @@ class WCrossEntropyLoss(nn.Module):
         super(WCrossEntropyLoss, self).__init__()
 
     def forward(self, x, target, weights):
-        return F.cross_entropy(x, target, weight=weights)
+        loss = F.cross_entropy(x, target, reduction="none")
+        if weights is None:
+            return torch.mean(loss)
+        return weights @ loss / weights.sum()
