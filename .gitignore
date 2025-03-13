@@ -12,3 +12,4 @@ multirun/
 *.npy
 data_adbench
 dataset/
+*.tex
