@@ -27,6 +27,8 @@ class SamplingIterativeLearning:
             return CosineSampling(conf.nu_min, conf.nu_max, conf.max_iter, conf.sampling_method, saving_path)
         elif conf.ratio == "exponential":
             return ExponentialSampling(conf.nu_min, conf.nu_max, conf.max_iter, conf.sampling_method, saving_path)
+        elif conf.ratio == "exponential_v2":
+            return ExponentialSamplingV2(conf.nu_min, conf.nu_max, conf.max_iter, conf.p, conf.sampling_method, saving_path)
         elif type(conf.ratio) is float:
             return ConstantSampling(conf.ratio, conf.sampling_method, conf)
         else:
@@ -233,7 +235,7 @@ class ExponentialSampling(SamplingMethod):
         self.nu_max = nu_max
         self.max_iter = max_iter
 
-    def __call__(self, scores, X, y, iteration_number, tsne) -> tuple:
+    def __call__(self, scores, X, y, iteration_number, tsne=None) -> tuple:
         """
         Select the ratio% lowest scores
         """
@@ -260,3 +262,48 @@ class ExponentialSampling(SamplingMethod):
         return self.nu_min + 1 / 2 * (self.nu_max - self.nu_min) * (
             1 + np.exp(-iteration_number / self.max_iter)
         )
+
+
+class ExponentialSamplingV2(SamplingMethod):
+    def __init__(
+        self,
+        nu_min: float,
+        nu_max: float,
+        max_iter: int = 10,
+        p: float = 0.5,
+        method="deterministic",
+        saving_path=None
+    ):
+        super().__init__(method, saving_path)
+        self.nu_min = nu_min
+        self.nu_max = nu_max
+        self.max_iter = max_iter
+        self.p = p  # steepness parameter
+
+    def __call__(self, scores, X, y, iteration_number, tsne=None) -> tuple:
+        """
+        Select the ratio% lowest scores
+        """
+        ratio = self.get_current_ratio(iteration_number)
+        indices = []
+        if self.method == "deterministic":
+            indices_sorted = sorted(
+                range(len(scores)), key=lambda i: scores[i], reverse=False
+            )
+            indices = indices_sorted[: int(len(scores) * ratio)]
+        elif self.method == "probabilistic":
+            # Sampling with probability proportional to the score
+            proba = scores / np.sum(scores)
+            indices = np.random.choice(
+                range(len(scores)), size=int(len(scores) * ratio), p=proba
+            )
+        if tsne:
+            plot_tsne(tsne, X, y, iteration_number, self.saving_path, indices)
+        return X[indices], y[indices]
+
+    def get_current_ratio(self, iteration_number):
+        # Calculate the ratio based on the new exponential decay scheduler
+        # At iteration_number = 0: ratio = nu_max, at iteration_number = max_iter: ratio = nu_min
+        exponent = (iteration_number / self.max_iter) ** self.p
+        ratio = self.nu_max * (self.nu_min / self.nu_max) ** exponent
+        return ratio

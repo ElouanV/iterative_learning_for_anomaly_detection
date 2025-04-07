@@ -11,5 +11,6 @@ results/
 multirun/
 *.npy
 data_adbench
+notebooks/
 dataset/
 *.tex

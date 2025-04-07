@@ -179,7 +179,7 @@ def main(cfg: omegaconf.DictConfig):
         if cfg.training_method.name == "DSIL":
             if cfg.training_method.epoch_budget:
                 cfg.model.training.epochs = cfg.model.training.epochs // cfg.training_method.max_iter  
-            for ratio in [0.5, "cosine", "exponential"]:
+            for ratio in [0.5, "cosine", "exponential", "exponential_v2"]:
                 cfg.training_method.ratio = ratio
                 for sampling_method in ["deterministic"]:
                     cfg.training_method.sampling_method = sampling_method
