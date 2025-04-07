@@ -82,7 +82,7 @@ def run_config(cfg, logger, device):
 
     if (
         Path(saving_path, "model_metrics.csv").exists()
-        and Path(saving_path, "model.pth").exists()
+        and Path(saving_path, "model.pth").exists() and cfg.force_rerun == False and cfg.mode != "debug"
     ):
         logger.info("Experiment already done, skipping")
         return
@@ -118,12 +118,7 @@ def run_config(cfg, logger, device):
     # Suppose we know how much anomaly are in the dataset
     y_pred = low_density_anomalies(-score, len(indices[y_test_anomaly == 1]))
     f1_score = skm.f1_score(y_test_anomaly, y_pred)
-    # plot_tsne(
-    #     data,
-    #     y_test_anomaly,
-    #     y_pred,a
-    #     saving_path=saving_path,
-    # )
+
     threshold = np.percentile(score, y_test_anomaly.mean() * 100)
     plot_anomaly_score_distribution(
         score, saving_path, exp_name=experiment_name, threshold=threshold
@@ -182,11 +177,7 @@ def main(cfg: omegaconf.DictConfig):
     device = check_cuda(logger, cfg.device)
     if cfg.mode == "benchmark":
         if cfg.training_method.name == "DSIL":
-<<<<<<< HEAD
             for ratio in [0.5, "cosine", "exponential"]:
-=======
-            for ratio in [0.5]:
->>>>>>> 924f15f44a30f23e8f7bcbaeb04f9a2fe64116ed
                 cfg.training_method.ratio = ratio
                 for sampling_method in ["deterministic"]:
                     cfg.training_method.sampling_method = sampling_method

@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from sklearn.metrics import f1_score, roc_auc_score
 
-from src.utils import pred_from_scores, select_model
+from src.utils import low_density_anomalies, pred_from_scores, select_model
 from src.viz.training_viz import iterative_training_score_evolution, plot_tsne
 
 
@@ -24,11 +24,11 @@ class SamplingIterativeLearning:
     def get_sampling_method(conf: dict, saving_path: Path | str):
         conf = conf.training_method
         if conf.ratio == "cosine":
-            return CosineSampling(conf.nu_min, conf.nu_max, conf.max_iter, saving_path)
+            return CosineSampling(conf.nu_min, conf.nu_max, conf.max_iter, conf.sampling_method, saving_path)
         elif conf.ratio == "exponential":
-            return ExponentialSampling(conf.nu_min, conf.nu_max, conf.max_iter, saving_path)
+            return ExponentialSampling(conf.nu_min, conf.nu_max, conf.max_iter, conf.sampling_method, saving_path)
         elif type(conf.ratio) is float:
-            return ConstantSampling(conf.ratio, saving_path)
+            return ConstantSampling(conf.ratio, conf.sampling_method, conf)
         else:
             raise ValueError(
                 f"Unknown ratio method: {conf.ratio}, type: {type(conf.ratio)}"
@@ -90,9 +90,9 @@ class SamplingIterativeLearning:
             iteration_scores.append(scores)
             # Evaluation
             if X_eval is not None and y_eval is not None:
-                scores = current_model.predict_score(X_eval)
+                scores = current_model.predict_score(X_eval).squeeze()
                 nb_anomalies = int(np.sum(y_eval))
-                y_pred = pred_from_scores(scores, nb_anomalies)
+                y_pred = low_density_anomalies(-scores, nb_anomalies)
                 f1 = f1_score(y_eval, y_pred)
                 self.logger.info(f"F1 score at iteration {iteration}: {f1}")
                 roc = roc_auc_score(y_eval, y_pred)
@@ -168,6 +168,10 @@ class ConstantSampling(SamplingMethod):
             proba = scores / np.sum(scores)
             indices_to_keep = np.random.choice(
                 range(len(scores)), size=int(len(scores) * self.ratio), p=proba
+            )
+        else:
+            raise ValueError(
+                f"Unknown sampling method: {self.method}, type: {type(self.method)}"
             )
         if tsne:
             plot_tsne(tsne, X, y, iteration_number, self.saving_path, indices_to_keep)
