@@ -1,6 +1,6 @@
 random_seed: 0
 save_fig: True
-output_path: 'dataset'
+output_path: 'tests'
 device: 'auto'
 mode: 'benchmark' # 'benchmark' or 'debug'
 

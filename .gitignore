@@ -11,4 +11,5 @@ results/
 multirun/
 *.npy
 data_adbench
-dataset/synthetic_generation/
+dataset/
+*.tex

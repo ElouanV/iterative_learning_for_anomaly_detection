@@ -6,21 +6,22 @@ import numpy as np
 from matplotlib import pyplot as plt
 from sklearn.metrics import f1_score, roc_auc_score
 
-from utils import pred_from_scores
+from src.utils import pred_from_scores
 
 
 class WeightedLossIterativeLearning:
     def __init__(
-        self, max_round, epochs, batch_size, lr, device, model, model_config
+        self, cfg, device, model
     ):
-        self.max_round = max_round
-        self.epochs = epochs
-        self.batch_size = batch_size
-        self.lr = lr
+        self.conf = cfg.training_method
+        self.max_round = self.conf.max_round
+        self.epochs = cfg.model.training.epochs
+        self.batch_size = cfg.model.training.batch_size
+        self.lr = cfg.model.training.learning_rate
         self.device = device
         self.model = model
         self.logger = logging.getLogger(__name__)
-        self.model_config = model_config
+        self.model_config = cfg.model
 
     def __call__():
         pass
@@ -52,11 +53,17 @@ class WeightedLossIterativeLearning:
             * tau
         )
         beta_t = scores_t_median
-        weights = 1 / (1 + np.exp(alpha_t * (scores_t - beta_t)))
-        return weights
+        # Clamp the weights to avoid numerical instability
+        max_val = 1e1
+        min_val = 1e-2
+        clamped = np.clip(alpha_t * (scores_t - beta_t), min_val, max_val)
+
+        weights = 1 / (1 + np.exp(clamped))
+        # return weights as float 32
+        return weights.astype(np.float32)
 
     def train(self, X_train, y_train=None, X_eval=None, y_eval=None):
-        weights = np.ones(len(y_train))
+        weights = np.ones(len(y_train), dtype=np.float32)
         best_model = None
         best_h = np.inf
         r_t = np.arange(len(y_train))
@@ -68,7 +75,7 @@ class WeightedLossIterativeLearning:
         for iteration in range(self.max_round):
             model = deepcopy(self.model)
             model, train_losses = model.fit(
-                X_train, weights=weights, model_config=self.model_config
+                X_train, weights=weights
             )
             train_log["train_losses"].append(train_losses[-1])
             anomaly_scores = model.predict_score(X_train)
@@ -93,7 +100,7 @@ class WeightedLossIterativeLearning:
                 train_log["f1_scores"].append(f1)
                 train_log["roc_auc_scores"].append(roc)
 
-        self.plot_training_log(train_log)
+        # self.plot_training_log(train_log)
         return best_model, train_log
 
     def plot_training_log(self, train_log):

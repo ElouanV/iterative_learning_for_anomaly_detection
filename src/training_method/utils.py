@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from training_method.iterative_learning import SamplingIterativeLearning
-from training_method.weighted_loss_iterative_learning import \
+from src.training_method.iterative_learning import SamplingIterativeLearning
+from src.training_method.weighted_loss_iterative_learning import \
     WeightedLossIterativeLearning
 
 

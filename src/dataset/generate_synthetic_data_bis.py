@@ -11,7 +11,7 @@ import yaml
 from bidict import bidict
 from matplotlib import pyplot as plt
 
-from src.dataset.utils import split_list
+from utils import split_list
 
 
 def generate_random_dag_with_edges(num_nodes: int, num_edges: int):
@@ -229,7 +229,6 @@ def generate_synthetic_data(
         saving_path=saving_path,
     )
     X = run_graphical_model(graphical_model, n_samples)
-    anomalies_scheme = None
     plot_graph(graphical_model, saving_path="test")
     X, y, explanation, anomaly_information = add_anomalies(
         X, graphical_model, anomalies=anomalies, ratio_anomalies=ratio_aomalies

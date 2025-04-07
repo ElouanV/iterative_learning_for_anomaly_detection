@@ -8,10 +8,10 @@ import numpy as np
 import torch
 from torch import nn
 from torch.optim import Adam
-from torch.utils.data import DataLoader
+from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 
-from src.models.losses import WMSELoss
+from src.models.losses import WMSELoss, WCrossEntropyLoss
 from src.viz.training_viz import plot_feature_importance
 
 
@@ -162,10 +162,25 @@ class DTE:
         optimizer = Adam(
             self.model.parameters(), lr=self.lr, weight_decay=self.weight_decay
         )
-        data = X_train if weights is None else (X_train, weights)
+
+        class CustomDataset(Dataset):
+            def __init__(self, data, weights=None):
+                self.data = data
+                self.weights = weights
+
+            def __len__(self):
+                return len(self.data)
+
+            def __getitem__(self, idx):
+                sample = self.data[idx]
+                if self.weights is not None:
+                    weight = self.weights[idx]
+                    return sample, weight
+                return sample
+        dataset = CustomDataset(X_train, weights)
 
         train_loader = DataLoader(
-            torch.from_numpy(data).float(),
+            dataset,
             batch_size=self.batch_size,
             shuffle=True,
             drop_last=False,
@@ -176,13 +191,13 @@ class DTE:
             for _ in range(self.epochs):
                 self.model.train()
                 loss_ = []
-                for x in train_loader:
-                    if x is tuple:
-                        x, w = x
+                for batch in train_loader:
+                    if isinstance(batch, list):
+                        x, w = batch
                         x = x.to(self.device)
                         w = w.to(self.device)
                     else:
-                        x = x.to(self.device)
+                        x = batch.to(self.device)
                         w = None
                     optimizer.zero_grad()
 
@@ -298,8 +313,10 @@ class DTECategorical(DTE):
         target = binning(
             t, T=self.T, device=self.device, num_bins=self.num_bins
         )
-
-        loss = nn.CrossEntropyLoss(weight=weights)(t_pred, target)
+        if weights is None:
+            loss = nn.CrossEntropyLoss()(t_pred, target)
+        else: 
+            loss = WCrossEntropyLoss()(t_pred, target, weights)
 
         return loss
 

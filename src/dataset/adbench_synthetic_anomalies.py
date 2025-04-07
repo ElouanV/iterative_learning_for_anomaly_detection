@@ -22,7 +22,7 @@ from sklearn.mixture import GaussianMixture
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 import pickle
-from src.dataset.generate_synthetic_data_bis import generate_anomalies_scheme
+from generate_synthetic_data_bis import generate_anomalies_scheme
 
 # Path to adbench datasets
 DATA_PATH = pkg_resources.resource_filename("adbench", "datasets/")
@@ -97,7 +97,6 @@ class DataGenerator:
         y_anomalies = []
         explanation = []
         anomaly_code = bidict(anomaly_code)
-        anomalies_info = {}
         for anomaly in anomalies_scheme.keys():
             anomalies_info = anomalies_scheme[anomaly]
             if anomaly == "cluster":
@@ -114,7 +113,7 @@ class DataGenerator:
                     np.full(anomalies_nb[anomaly], anomaly_code[anomaly])
                 )
                 explanation.append(np.one(anomalies.shape))
-                anomalies_info[anomaly] = {"alpha": alpha, "features": "all"}
+                anomalies_info["features": "all"]
             elif anomaly == "global":
                 selected_features = anomalies_info["features"]
                 alpha = anomalies_info["alpha"]
@@ -133,10 +132,6 @@ class DataGenerator:
                 exp = np.zeros(anomalies.shape)
                 exp[:, selected_features] = 1
                 explanation.append(exp)
-                anomalies_info[anomaly] = {
-                    "alpha": alpha,
-                    "features": selected_features
-                }
             elif anomaly == "local":
                 selected_features = anomalies_info["features"]
                 alpha = anomalies_info["alpha"]
@@ -155,10 +150,7 @@ class DataGenerator:
                 exp = np.zeros(anomalies.shape)
                 exp[:, selected_features] = 1
                 explanation.append(exp)
-                anomalies_info[anomaly] = {
-                    "alpha": alpha,
-                    "features": selected_features,
-                }
+
             elif anomaly == "additive_noise":
                 selected_features = anomalies_info["features"]
                 alpha = anomalies_info["alpha"]
@@ -176,10 +168,7 @@ class DataGenerator:
                 exp = np.zeros(anomalies.shape)
                 exp[:, selected_features] = 1
                 explanation.append(exp)
-                anomalies_info[anomaly] = {
-                    "features": selected_features,
-                    "alpha": alpha,
-                }
+  
             elif anomaly == "multiplicative_noise":
                 selected_features = anomalies_info["features"]
                 alpha = anomalies_info["alpha"]
@@ -198,10 +187,6 @@ class DataGenerator:
                 exp = np.zeros(anomalies.shape)
                 exp[:, selected_features] = 1
                 explanation.append(exp)
-                anomalies_info[anomaly] = {
-                    "features": selected_features,
-                    "alpha": alpha,
-                }
             else:
                 raise ValueError("Anomaly type not recognized")
         return X_anomalies, y_anomalies, explanation, anomalies_info
@@ -290,7 +275,7 @@ class DataGenerator:
             (np.zeros(X_synthetic_normal.shape), *explanation_anomalies), axis=0
         )
 
-        return X, y, explanation, anomalies_info
+        return X, y, explanation, anomaly_scheme
 
     def generator(
         self,
@@ -499,14 +484,10 @@ class DataGenerator:
 
 
 def generate_and_save_synthethic_data(cfg, saving_path, db_name):
-    if cfg.training_method.name == "semi-supervised":
-        datagenerator = DataGenerator(
-            seed=cfg.random_seed, test_size=0.5, normal=True, config=cfg
-        )  # data generator
-    else:
-        datagenerator = DataGenerator(
-            seed=cfg.random_seed, test_size=0, normal=False, config=cfg
-        )  # data generator
+
+    datagenerator = DataGenerator(
+        seed=cfg.random_seed, test_size=0, normal=False, config=cfg
+    )  # data generator
 
     datagenerator.dataset = cfg.dataset.dataset_name  # specify the dataset name
     data, anomaly_information = datagenerator.generator(
@@ -525,7 +506,7 @@ def generate_and_save_synthethic_data(cfg, saving_path, db_name):
     )  # maximum of 50,000 data points are available
     X = data['X']
     y = data['y']
-    explanation = ['explanation']
+    explanation = data['explanation']
     print(saving_path, db_name)
     with open(os.path.join(saving_path, "anomaly_information.yaml"), "w") as file:
         yaml.dump(anomaly_information, file)
