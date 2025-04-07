@@ -6,7 +6,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 from sklearn.metrics import f1_score, roc_auc_score
 
-from src.utils import pred_from_scores
+from utils import pred_from_scores
 
 
 class WeightedLossIterativeLearning:

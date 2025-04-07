@@ -2,20 +2,20 @@ random_seed: 0
 save_fig: True
 output_path: 'results'
 device: 'auto'
-mode: 'benchmark' # 'benchmark' or 'debug'
-force_rerun: True
+mode: 'debug' # 'benchmark' or 'debug'
+force_rerun: False
 
 realistic_synthetic_mode:
 alpha: 5
 percentage: 0.1
-run_id: "DDPM_seeds"
+run_id: "debug"
 
 
 defaults:
   - _self_
   - dataset: WBC
-  - model: 'DDPM'
-  - training_method: 'unsupervised'
+  - model: 'DTECategorical'
+  - training_method: 'iterative_dataset_sampling'
   - override hydra/launcher: 'joblib'
 
 
@@ -24,7 +24,7 @@ hydra:
       n_jobs: 2
   sweeper: 
     params:
-      random_seed: 1,2
+      random_seed: 0
       # All datasets that start with A_synthetic
-      dataset:  glob(*, A_synthetic*)
-      training_method: unsupervised, iterative_dataset_sampling
+      dataset:  glob(A_synthetic*)
+      training_method: iterative_dataset_sampling

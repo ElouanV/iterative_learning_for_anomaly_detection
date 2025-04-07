@@ -11,8 +11,8 @@ from torch.optim import Adam
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 
-from src.models.losses import WMSELoss, WCrossEntropyLoss
-from src.viz.training_viz import plot_feature_importance
+from models.losses import WMSELoss, WCrossEntropyLoss
+from viz.training_viz import plot_feature_importance
 
 
 class MLP(nn.Module):
@@ -143,6 +143,12 @@ class DTE:
     def compute_loss(self, x, t):
         pass
 
+    def create_model(self, X_train):
+        self.model = MLP(
+                [X_train.shape[-1]] + self.hidden_size, num_bins=self.num_bins
+            ).to(self.device)
+        return self.model
+
     def fit(
         self,
         X_train,
@@ -155,9 +161,7 @@ class DTE:
         device="cuda",
     ):
         if self.model is None:  # allows retraining
-            self.model = MLP(
-                [X_train.shape[-1]] + self.hidden_size, num_bins=self.num_bins
-            ).to(self.device)
+            self.model = self.create_model(X_train)
 
         optimizer = Adam(
             self.model.parameters(), lr=self.lr, weight_decay=self.weight_decay

@@ -22,9 +22,9 @@ from torch.optim import Adam
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from src.models.base_model import BaseModel
-from src.models.losses import WMSELoss
-from src.viz.training_viz import plot_nmf, reconstruction_error_boxplot
+from models.base_model import BaseModel
+from models.losses import WMSELoss
+from viz.training_viz import plot_nmf, reconstruction_error_boxplot
 
 ModuleType = Union[str, Callable[..., nn.Module]]
 
@@ -495,6 +495,14 @@ class DDPM(BaseModel):
                 xs.append(x_noisy)
         return xs
 
+    def create_model(self, X):
+        model = ResNetDiffusion(
+                X.shape[-1], 0, self.resnet_parameters
+            ).to(self.device)
+        self.model = model
+        return model
+        
+
     def fit(
         self,
         X_train,
@@ -505,9 +513,7 @@ class DDPM(BaseModel):
     ):
         if self.model is None:  # allows retraining
 
-            self.model = ResNetDiffusion(
-                X_train.shape[-1], 0, self.resnet_parameters
-            ).to(self.device)
+            self.model = self.create_model(X_train)
 
         optimizer = Adam(
             self.model.parameters(), lr=self.lr, weight_decay=self.weight_decay

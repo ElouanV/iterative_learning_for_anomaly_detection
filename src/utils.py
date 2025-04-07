@@ -4,9 +4,9 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from src.dataset.data_generator import DataGenerator
-from src.models.ddpm import DDPM
-from src.models.dte import DTECategorical, DTEInverseGamma
+from dataset.data_generator import DataGenerator
+from models.ddpm import DDPM
+from models.dte import DTECategorical, DTEInverseGamma
 # from src.models.vision import DTECategorical as DTECVision
 
 
@@ -154,6 +154,15 @@ def setup_experiment(cfg: dict):
             else ""
         )
     )
+
+    if cfg.training_method.name == "DSIL":
+        if cfg.training_method.epoch_budget:
+            experiment_name += "_epoch_budget"
+        if cfg.training_method.reinitialize_model_weights:
+            experiment_name += "_reinitialize_model_weights"
+        else:
+            experiment_name += "_no_reinitialize_model_weights"
+
     saving_path = Path(
         cfg.output_path,
         str(cfg.run_id),

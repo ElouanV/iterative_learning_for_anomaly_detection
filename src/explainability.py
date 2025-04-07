@@ -8,9 +8,9 @@ import omegaconf
 import pandas as pd
 from adbench.myutils import Utils
 
-from src.metrics import explanation_accuracy, nDCG_p
-from src.shap_explainer import ShapExplainer
-from src.utils import (check_cuda, get_dataset, low_density_anomalies,
+from metrics import explanation_accuracy, nDCG_p
+from shap_explainer import ShapExplainer
+from utils import (check_cuda, get_dataset, low_density_anomalies,
                        select_model, setup_experiment)
 
 

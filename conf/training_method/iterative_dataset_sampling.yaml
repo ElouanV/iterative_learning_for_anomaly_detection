@@ -6,3 +6,5 @@ nu_max: 0.8
 # deterministic | probabilistic
 sampling_method: deterministic
 max_iter: 15
+reinitialize_model_weights: True
+epoch_budget: True

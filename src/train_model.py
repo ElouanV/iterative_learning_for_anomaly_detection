@@ -10,12 +10,12 @@ import sklearn.metrics as skm
 from adbench.myutils import Utils
 from matplotlib import pyplot as plt
 
-from src.training_method.iterative_learning import SamplingIterativeLearning
-from src.training_method.weighted_loss_iterative_learning import \
+from training_method.iterative_learning import SamplingIterativeLearning
+from training_method.weighted_loss_iterative_learning import \
     WeightedLossIterativeLearning
-from src.utils import (check_cuda, get_dataset, low_density_anomalies,
+from utils import (check_cuda, get_dataset, low_density_anomalies,
                    select_model, setup_experiment)
-from src.viz.training_viz import (plot_anomaly_score_distribution,
+from viz.training_viz import (plot_anomaly_score_distribution,
                               plot_anomaly_score_distribution_split, plot_tsne)
 
 
@@ -177,6 +177,8 @@ def main(cfg: omegaconf.DictConfig):
     device = check_cuda(logger, cfg.device)
     if cfg.mode == "benchmark":
         if cfg.training_method.name == "DSIL":
+            if cfg.training_method.epoch_budget:
+                cfg.model.training.epochs = cfg.model.training.epochs // cfg.training_method.max_iter  
             for ratio in [0.5, "cosine", "exponential"]:
                 cfg.training_method.ratio = ratio
                 for sampling_method in ["deterministic"]:

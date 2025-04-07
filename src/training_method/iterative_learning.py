@@ -7,8 +7,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from sklearn.metrics import f1_score, roc_auc_score
 
-from src.utils import low_density_anomalies, pred_from_scores, select_model
-from src.viz.training_viz import iterative_training_score_evolution, plot_tsne
+from utils import low_density_anomalies, pred_from_scores, select_model
+from viz.training_viz import iterative_training_score_evolution, plot_tsne
 
 
 class SamplingIterativeLearning:
@@ -43,7 +43,6 @@ class SamplingIterativeLearning:
         model=None,
         max_iter=10,
         device="cuda",
-        tsne=False,
     ):
 
         if model is None:
@@ -58,17 +57,19 @@ class SamplingIterativeLearning:
             "nb_anomalies": [],
         }
         iteration_scores = []
-        if tsne:
-            from sklearn.manifold import TSNE
-
-            tsne = TSNE(n_components=2)
-            tsne.fit(X_train)
+        if model.model is None:
+            model.create_model(X_train)
+        if self.conf.training_method.reinitialize_model_weights:
+            intial_weights = deepcopy(model.model.state_dict())
         for iteration in range(max_iter):
             train_log["nb_anomalies"].append(
                 np.sum(current_y) / np.sum(y_train)
             )
-            current_model = deepcopy(model)
-            model, train_loss = current_model.fit(current_X)
+            
+            if self.conf.training_method.reinitialize_model_weights:
+                model.model.load_state_dict(intial_weights)
+                self.logger.info("Reinitializing model weights")
+            model, train_loss = model.fit(current_X)
             # Save current X and y of this iteration
             np.savez(
                 os.path.join(self.saving_path, f"trainset_{iteration}.npz"),
@@ -76,9 +77,9 @@ class SamplingIterativeLearning:
                 y=current_y,
             )
             # Predict scores
-            scores = current_model.predict_score(X_train)
+            scores = model.predict_score(X_train)
             current_X, current_y = self.update_trainset(
-                scores, X_train, y_train, iteration, tsne
+                scores, X_train, y_train, iteration
             )
             train_log["train_losses"].append(train_loss[-1])
             # Save scores
@@ -90,15 +91,17 @@ class SamplingIterativeLearning:
             iteration_scores.append(scores)
             # Evaluation
             if X_eval is not None and y_eval is not None:
-                scores = current_model.predict_score(X_eval).squeeze()
+                scores = model.predict_score(X_eval)
                 nb_anomalies = int(np.sum(y_eval))
-                y_pred = low_density_anomalies(-scores, nb_anomalies)
+                y_pred = pred_from_scores(scores, nb_anomalies)
                 f1 = f1_score(y_eval, y_pred)
                 self.logger.info(f"F1 score at iteration {iteration}: {f1}")
                 roc = roc_auc_score(y_eval, y_pred)
                 # Save predictions
                 np.save(
-                    os.path.join(self.saving_path, f"predictions_{iteration}.npy"),
+                    os.path.join(
+                        self.saving_path, f"predictions_{iteration}.npy"
+                    ),
                     y_pred,
                 )
                 self.logger.info(
@@ -107,14 +110,16 @@ class SamplingIterativeLearning:
                 train_log["f1_scores"].append(f1)
                 train_log["roc_auc_scores"].append(roc)
             # Save model
-            model.save_model(path=os.path.join(self.saving_path, f"model_{iteration}.pth"))
+            model.save_model(
+                path=os.path.join(self.saving_path, f"model_{iteration}.pth")
+            )
         self.plot_training_log(train_log)
         iterative_training_score_evolution(
             iteration_scores,
             exp_name=self.exp_name,
             saving_path=self.saving_path,
         )
-        return current_model, train_log
+        return model, train_log
 
     def plot_training_log(self, train_log):
 
