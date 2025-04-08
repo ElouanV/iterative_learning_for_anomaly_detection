@@ -156,12 +156,18 @@ def setup_experiment(cfg: dict):
     )
 
     if cfg.training_method.name == "DSIL":
-        if cfg.training_method.epoch_budget:
-            experiment_name += "_epoch_budget"
-        if cfg.training_method.reinitialize_model_weights:
-            experiment_name += "_reinitialize_model_weights"
-        else:
-            experiment_name += "_no_reinitialize_model_weights"
+        try:
+            if cfg.training_method.epoch_budget:
+                experiment_name += "_epoch_budget"
+        except AttributeError:
+            pass
+        try:
+            if cfg.training_method.reinitialize_model_weights:
+                experiment_name += "_reinitialize_model_weights"
+            else:
+                experiment_name += "_no_reinitialize_model_weights"
+        except AttributeError:
+            pass
 
     saving_path = Path(
         cfg.output_path,
