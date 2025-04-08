@@ -2,13 +2,13 @@ random_seed: 0
 save_fig: True
 output_path: 'results'
 device: 'auto'
-mode: 'debug' # 'benchmark' or 'debug'
+mode: 'benchmark' # 'benchmark' or 'debug'
 force_rerun: False
 
 realistic_synthetic_mode:
 alpha: 5
 percentage: 0.1
-run_id: "debug"
+run_id: "hyperparam_epoch_budgeet_reinitializew"
 
 
 defaults:
@@ -21,10 +21,10 @@ defaults:
 
 hydra:
   launcher:
-      n_jobs: 2
+      n_jobs: 8
   sweeper: 
     params:
-      random_seed: 0
+      random_seed: 0,1,2,3,4
       # All datasets that start with A_synthetic
-      dataset:  glob(A_synthetic*)
+      dataset:  glob(*, A_synthetic*)
       training_method: iterative_dataset_sampling

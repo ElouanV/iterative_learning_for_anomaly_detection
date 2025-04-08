@@ -62,6 +62,9 @@ class SamplingIterativeLearning:
         if self.conf.training_method.reinitialize_model_weights:
             intial_weights = deepcopy(model.model.state_dict())
         for iteration in range(max_iter):
+            saving_path = os.path.join(
+                self.saving_path, f"/it_{iteration}"
+            )
             train_log["nb_anomalies"].append(
                 np.sum(current_y) / np.sum(y_train)
             )
@@ -72,7 +75,7 @@ class SamplingIterativeLearning:
             model, train_loss = model.fit(current_X)
             # Save current X and y of this iteration
             np.savez(
-                os.path.join(self.saving_path, f"trainset_{iteration}.npz"),
+                os.path.join(saving_path, f"trainset_{iteration}.npz"),
                 X=current_X,
                 y=current_y,
             )
@@ -84,11 +87,12 @@ class SamplingIterativeLearning:
             train_log["train_losses"].append(train_loss[-1])
             # Save scores
             np.save(
-                os.path.join(self.saving_path, f"scores_{iteration}.npy"),
+                os.path.join(saving_path, f"scores_{iteration}.npy"),
                 scores,
             )
 
             iteration_scores.append(scores)
+            self.plot_train_loss(train_loss, iteration, saving_path)
             # Evaluation
             if X_eval is not None and y_eval is not None:
                 scores = model.predict_score(X_eval)
@@ -111,7 +115,7 @@ class SamplingIterativeLearning:
                 train_log["roc_auc_scores"].append(roc)
             # Save model
             model.save_model(
-                path=os.path.join(self.saving_path, f"model_{iteration}.pth")
+                path=os.path.join(saving_path, f"model_{iteration}.pth")
             )
         self.plot_training_log(train_log)
         iterative_training_score_evolution(
@@ -139,6 +143,15 @@ class SamplingIterativeLearning:
         plt.xticks(range(len(train_log["train_losses"])))
         plt.savefig(os.path.join(self.saving_path, "train_log.png"))
 
+    def plot_train_loss(self, train_loss, iteration, saving_path):
+        plt.figure()
+        plt.plot(train_loss)
+        plt.title(f"Train loss at iteration {iteration}")
+        plt.xlabel("epoch")
+        plt.ylabel("loss")
+        plt.grid()
+        plt.savefig(os.path.join(saving_path, "train_loss.png"))
+        plt.close()
 
 class SamplingMethod:
     def __init__(self, method="deterministic", saving_path=None):
