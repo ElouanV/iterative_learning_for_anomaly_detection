@@ -95,7 +95,7 @@ def get_normal_indices(
     return indices_sorted[: int(n * p)]
 
 
-def get_dataset(cfg: Path):
+def get_dataset(cfg):
     if cfg.training_method.name == "semi-supervised":
         datagenerator = DataGenerator(
             seed=cfg.random_seed, test_size=0.5, normal=True, config=cfg

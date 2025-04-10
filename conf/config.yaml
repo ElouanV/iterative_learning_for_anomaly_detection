@@ -8,7 +8,7 @@ force_rerun: False
 realistic_synthetic_mode:
 alpha: 5
 percentage: 0.1
-run_id: "hyperparam_epoch_budgeet_reinitializew"
+run_id: "hyperparam_epoch_budget_reinitializew"
 
 
 defaults:

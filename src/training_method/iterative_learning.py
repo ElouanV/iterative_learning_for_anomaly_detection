@@ -65,8 +65,9 @@ class SamplingIterativeLearning:
             intial_weights = deepcopy(model.model.state_dict())
         for iteration in range(max_iter):
             saving_path = os.path.join(
-                self.saving_path, f"/it_{iteration}"
+                self.saving_path, f"it_{iteration}"
             )
+            os.makedirs(saving_path, exist_ok=True)
             train_log["nb_anomalies"].append(
                 np.sum(current_y) / np.sum(y_train)
             )
@@ -173,7 +174,7 @@ class ConstantSampling(SamplingMethod):
         super().__init__(method, saving_path)
         self.ratio = ratio
 
-    def __call__(self, scores, X, y, iteration_number=None, tsne=None):
+    def __call__(self, scores, X, y, iteration_number=None, tsne=None, return_indices=False):
         """
         Select the ratio% lowest scores
         """
@@ -195,6 +196,8 @@ class ConstantSampling(SamplingMethod):
             )
         if tsne:
             plot_tsne(tsne, X, y, iteration_number, self.saving_path, indices_to_keep)
+        if return_indices:
+            return indices_to_keep
         return X[indices_to_keep], y[indices_to_keep]
 
     def get_current_ratio(self, iteration_number):
@@ -210,7 +213,7 @@ class CosineSampling(SamplingMethod):
         self.nu_max = nu_max
         self.max_iter = max_iter
 
-    def __call__(self, scores, X, y, iteration_number, tsne=None):
+    def __call__(self, scores, X, y, iteration_number, tsne=None, return_indices=False) -> tuple:
         """
         Select the ratio% lowest scores
         """
@@ -231,6 +234,8 @@ class CosineSampling(SamplingMethod):
             )
         if tsne:
             plot_tsne(tsne, X, y, iteration_number, self.saving_path, indices)
+        if return_indices:
+            return indices
         return X[indices], y[indices]
 
     def get_current_ratio(self, iteration_number):
@@ -248,7 +253,7 @@ class ExponentialSampling(SamplingMethod):
         self.nu_max = nu_max
         self.max_iter = max_iter
 
-    def __call__(self, scores, X, y, iteration_number, tsne=None) -> tuple:
+    def __call__(self, scores, X, y, iteration_number, tsne=None, return_indices=False) -> tuple:
         """
         Select the ratio% lowest scores
         """
@@ -269,6 +274,8 @@ class ExponentialSampling(SamplingMethod):
             )
         if tsne:
             plot_tsne(tsne, X, y, iteration_number, self.saving_path, indices)
+        if return_indices:
+            return indices
         return X[indices], y[indices]
 
     def get_current_ratio(self, iteration_number):
@@ -293,7 +300,7 @@ class ExponentialSamplingV2(SamplingMethod):
         self.max_iter = max_iter
         self.p = p  # steepness parameter
 
-    def __call__(self, scores, X, y, iteration_number, tsne=None) -> tuple:
+    def __call__(self, scores, X, y, iteration_number, tsne=None, return_indices=False) -> tuple:
         """
         Select the ratio% lowest scores
         """
@@ -312,6 +319,8 @@ class ExponentialSamplingV2(SamplingMethod):
             )
         if tsne:
             plot_tsne(tsne, X, y, iteration_number, self.saving_path, indices)
+        if return_indices:
+            return indices
         return X[indices], y[indices]
 
     def get_current_ratio(self, iteration_number):
