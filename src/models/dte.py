@@ -353,19 +353,28 @@ class DTECategorical(DTE):
                     .numpy()
                 )
                 t_pred = self.predict_score(X_noisy)
-                err_i.append(np.abs(t_pred - t0))
+                err_i.append(t_pred - t0)
 
-            # Compute the mean error across timesteps for this feature
-            err_i = np.array(err_i)  # Shape: (num_timesteps, nb_samples)
+            err_i = np.abs(np.array(err_i))  # Shape: (num_timesteps, nb_samples)
             if agg == "mean":
                 err_i = np.mean(err_i, axis=0)
             elif agg == "max":
                 arg_max_i = np.argmax(err_i, axis=0)
                 arg_max.append(arg_max_i)
                 err_i = np.max(err_i, axis=0)
+            elif agg == "weighted_mean":
+                weights_i = []
+                for j in range(0, self.T, step):
+                    weights_i.append(1 / (j + 1))
+                weigts_i = np.array(weights_i)
+                err_i = np.average(err_i, axis=0, weights=weigts_i)
             err[:, i] = err_i
         if agg == "max" and saving_path:
             np.save(Path(saving_path, "arg_max.npy"), arg_max)
+        # Normalize the error for each instance in the batch
+        err = (err - np.min(err, axis=1, keepdims=True)) / (
+            np.max(err, axis=1, keepdims=True) - np.min(err, axis=1, keepdims=True) + 1e-8
+        )
         return np.array(err).squeeze()
 
     def gradient_explanation(self, x):
