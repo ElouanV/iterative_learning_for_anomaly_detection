@@ -272,16 +272,11 @@ class DataGenerator:
                     allow_pickle=True,
                 )
             # if 'synthetic' is a substring of the dataset name, then it is a synthetic dataset
-            elif "synthetic" in self.dataset:
+            else:
                 data = np.load(
                     self.config.dataset.dataset_path, allow_pickle=True
                 )
-                # if len(np.unique(data["y"])) > 2:
-                #     data["y"][data["y"] > 0] = 1
-            else:
-                raise NotImplementedError(
-                    f"Dataset {self.dataset} is not supported!"
-                )
+
             X = data["X"]
             y = data["y"]
             if "explanation" in data.keys():

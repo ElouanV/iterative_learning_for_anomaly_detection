@@ -194,7 +194,7 @@ def main(cfg: omegaconf.DictConfig):
                 cfg.model.training.epochs = (
                     cfg.model.training.epochs // cfg.training_method.max_iter
                 )
-            for ratio in [0.4, 0.7, 0.8, 0.9]:
+            for ratio in [0.4, 0.7, 0.8, 0.9, 0.95]:
                 cfg.training_method.ratio = ratio
                 for sampling_method in ["deterministic"]:
                     cfg.training_method.sampling_method = sampling_method

@@ -7,7 +7,6 @@ import torch
 from dataset.data_generator import DataGenerator
 from models.ddpm import DDPM
 from models.dte import DTECategorical, DTEInverseGamma
-# from src.models.vision import DTECategorical as DTECVision
 
 
 def select_model(model_config: dict, device):
