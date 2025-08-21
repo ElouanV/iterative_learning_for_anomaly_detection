@@ -2,9 +2,8 @@
 
 # Diffusion for Explainable Unsupervised Anomaly Detection
 **Iterative Learning for Tabular Anomaly Detection & Explainability**  
-<em>(Author list placeholder)</em>
 
-[Paper (arXiv/DOI – coming soon)](./) · (Optional project page)  
+[Paper (arXiv/DOI – coming soon)](./)  
 
 </div>
 
