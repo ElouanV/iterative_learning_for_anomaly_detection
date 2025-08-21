@@ -68,9 +68,7 @@ class SamplingIterativeLearning:
                 self.saving_path, f"it_{iteration}"
             )
             os.makedirs(saving_path, exist_ok=True)
-            train_log["nb_anomalies"].append(
-                np.sum(current_y) / np.sum(y_train)
-            )
+            train_log["nb_anomalies"].append(np.sum(current_y) / np.sum(y_train))
             
             if self.conf.training_method.reinitialize_model_weights:
                 model.model.load_state_dict(intial_weights)

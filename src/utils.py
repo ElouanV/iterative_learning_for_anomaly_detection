@@ -46,71 +46,31 @@ def select_model(model_config: dict, device):
         )
 
 
-def count_ano(indices, y):
-    """
-    count the number of anomalies among indices
-    """
-    return sum(y[indices])
-
-
 def pred_from_scores(scores, num_anomalies: int):
-    """
-    retourne une prédiction y où
-    y[i] = 1 si scores[i] est l'un des num_anomalies plus grand score
-        et 0 sinon.
-    """
-
-    indices_sorted = sorted(
-        range(len(scores)), key=lambda i: scores[i], reverse=True
-    )
+    """Return binary prediction vector with 1 for the top num_anomalies scores."""
     indices_sorted = np.argsort(scores)[::-1]
     result = np.zeros(len(scores))
     result[indices_sorted[:num_anomalies]] = 1
     return result
 
 
-def get_normal_indices(
-    scores,
-    p,
-    method="constant",
-    iteration=-1,
-    nu_min=50,
-    nu_max=100,
-    max_iter=10,
-):
-    """
-    takes :
-    |   scores : t_pred obtained by DTE model
-    |   p : percentage of indices that we want to keep for training
-    return :
-    |   output : list of indices that are the most likely to be normal and should be use for next training phase
-    """
-    if method == "cosine":
-        p = nu_min + 1 / 2 * (nu_max - nu_min) * (
-            1 + np.cos(np.pi * iteration / max_iter)
-        )
-    n = scores.shape[0]
-    indices_sorted = sorted(range(len(scores)), key=lambda i: scores[i])
-    return indices_sorted[: int(n * p)]
-
-
 def get_dataset(cfg):
+    """Load dataset via DataGenerator based on the training method (semi-supervised vs unsupervised)."""
     if cfg.training_method.name == "semi-supervised":
         datagenerator = DataGenerator(
             seed=cfg.random_seed, test_size=0.5, normal=True, config=cfg
-        )  # data generator
+        )
     else:
         datagenerator = DataGenerator(
             seed=cfg.random_seed, test_size=0, normal=False, config=cfg
-        )  # data generator
-
-    datagenerator.dataset = cfg.dataset.dataset_name  # specify the dataset name
+        )
+    datagenerator.dataset = cfg.dataset.dataset_name
     data = datagenerator.generator(
         la=0,
         max_size=50000,
         alpha=cfg.alpha,
         percentage=cfg.percentage,
-    )  # maximum of 50,000 data points are available
+    )
     return data
 
 
@@ -186,9 +146,7 @@ def setup_experiment(cfg: dict):
 
 
 def check_cuda(logger, device=None):
-    """
-    Check if CUDA is available and set the device accordingly.
-    """
+    """Return torch.device respecting explicit user setting or auto-detecting CUDA."""
     if torch.cuda.is_available():
         print(f"Cuda version: {torch.version.cuda}")
     else:

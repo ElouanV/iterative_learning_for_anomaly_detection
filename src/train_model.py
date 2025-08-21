@@ -8,15 +8,22 @@ import omegaconf
 import pandas as pd
 import sklearn.metrics as skm
 from adbench.myutils import Utils
-from matplotlib import pyplot as plt
 
 from training_method.iterative_learning import SamplingIterativeLearning
-from training_method.weighted_loss_iterative_learning import \
-    WeightedLossIterativeLearning
-from utils import (check_cuda, get_dataset, low_density_anomalies,
-                   select_model, setup_experiment)
-from viz.training_viz import (plot_anomaly_score_distribution,
-                              plot_anomaly_score_distribution_split, plot_tsne)
+from training_method.weighted_loss_iterative_learning import (
+    WeightedLossIterativeLearning,
+)
+from utils import (
+    check_cuda,
+    get_dataset,
+    low_density_anomalies,
+    select_model,
+    setup_experiment,
+)
+from viz.training_viz import (
+    plot_anomaly_score_distribution,
+    plot_anomaly_score_distribution_split,
+)
 
 
 def train_model(
